@@ -1,0 +1,1056 @@
+desc:Reverberator - Material Reverb (physically modelled)
+//tags: reverb physical-modelling plate spring
+//author: KallumS
+//
+// Sends audio through a physical model of an odd material, the way a plate
+// reverb sends it through a steel sheet. Every material is described by its
+// real physical constants -- Young's modulus, density, thickness, tension,
+// loss factor -- and the resonances, decay times and echo density are derived
+// from them. See README.md and docs/PHYSICS.md for the reasoning and numbers.
+
+slider1:0<0,18,1{Chain link fence,Ice sheet,Tension wire,Gong,PVC pipe,Glass,Marble,Car body panel,Leather,Wine bottle,Piano string,Guitar string,Violin string,Steel handpan,Toilet roll tube,Aluminium foil,Cling film,Corrugated tin roof,Metal barrel}>Material
+slider2:35<0,100,0.1>Mix (%)
+slider3:100<25,400,1:log=100>Size (%)
+slider4:100<10,400,1:log=100>Decay (%)
+slider5:0<-100,100,1>Brightness
+slider6:0<-12,12,0.1>Tuning (semitones)
+slider7:0<0,250,1>Pre-delay (ms)
+slider8:30<0,100,1>Drive (%)
+slider9:100<0,150,1>Width (%)
+slider10:20<20,1000,1:log=150>Low cut (Hz)
+slider11:20000<1000,20000,10:log=5000>High cut (Hz)
+slider12:0<-24,12,0.1>Output (dB)
+
+in_pin:Left input
+in_pin:Right input
+out_pin:Left output
+out_pin:Right output
+
+@init
+
+// ---------------------------------------------------------------------------
+// Memory map (units: EEL memory slots)
+// ---------------------------------------------------------------------------
+WG_MAX = 32;   WG_STRIDE = 20;  WG_BASE = 0;       // waveguide descriptors
+MOD_MAX = 64;  MOD_STRIDE = 12;   MOD_BASE = 1024;    // modal resonators
+FDN_STRIDE = 16;                FDN_BASE = 2048;    // 8 FDN line descriptors
+FDN_TMP = 2200;                             // FDN scratch (8)
+FDN_SIGN = 2210;                             // FDN input sign rows (2 x 8)
+PLATE_TMP = 2400;                             // plate-mode candidates (3 x 196)
+BESSEL_TAB = 3100;                              // Bessel zeros table (2 x 24)
+DPOOL0 = 4096; DPOOL_END = 131072;      // dispersion allpass states
+POOL0 = 131072; POOL_END = 8300000;     // delay lines
+
+// ---------------------------------------------------------------------------
+// Air at 20 C (same constants as Trombolese's constants.py)
+// ---------------------------------------------------------------------------
+C_AIR = 343.2; RHO_AIR = 1.204; NU_AIR = 0.00001506; GAM_AIR = 1.4017; PR_AIR = 0.708;
+// Kirchhoff wide-tube boundary layer: alpha = sqrt(omega/2) * BLC / (a c)
+BLC = sqrt(NU_AIR) + (GAM_AIR - 1)*sqrt(NU_AIR/PR_AIR);
+
+// FDN input sign rows: Hadamard rows 7 (mono) and 4 (side)
+function hsign(r, c) local(v, n) ( v = r & c; n = 0; loop(3, n += v & 1; v = v >> 1;); 1 - 2*(n & 1); );
+i = 0; loop(8, FDN_SIGN[i] = hsign(7, i); FDN_SIGN[8+i] = hsign(4, i); i += 1;);
+
+// Circular-membrane Bessel zeros j_mn and their angular order m, sorted
+i = 0;
+function jz(j, m) ( BESSEL_TAB[i*2] = j; BESSEL_TAB[i*2+1] = m; i += 1; );
+jz(2.4048,0); jz(3.8317,1); jz(5.1356,2); jz(5.5201,0); jz(6.3802,3); jz(7.0156,1);
+jz(7.5883,4); jz(8.4172,2); jz(8.6537,0); jz(8.7715,5); jz(9.7610,3); jz(9.9361,6);
+jz(10.1735,1); jz(11.0647,4); jz(11.0864,7); jz(11.6198,2); jz(11.7915,0); jz(12.2251,8);
+jz(12.3386,5); jz(13.0152,3); jz(13.3237,1); jz(13.3543,9); jz(13.5893,6); jz(14.4755,10);
+
+// ---------------------------------------------------------------------------
+// Physics helpers
+// ---------------------------------------------------------------------------
+
+// Decay time from a structural loss factor. A mode loses energy at
+// sigma = pi f eta, so T60 = 6.91 / (pi f eta) = 2.2 / (f eta); tmax caps it
+// for the losses eta does not describe (supports, radiation, air).
+function t60e(f, eta, tmax) ( 1/(1/tmax + f*eta/2.2); );
+
+// Brightness tilt for modes: full effect above ~4 kHz, none below 500 Hz.
+function brt(f) local(x) ( x = log(max(f, 1)/500)/log(8); bm^max(0, min(1, x)); );
+
+// Bessel function of the first kind by its power series (fine for x < 15).
+function besj(m, x) local(s, t, k, hx)
+(
+  hx = 0.5*x; t = 1; k = 1;
+  loop(m, t *= hx/k; k += 1;);
+  s = t; k = 1;
+  loop(40, t *= -hx*hx/(k*(k + m)); s += t; k += 1;);
+  s;
+);
+
+// First-order allpass: group delay and (unwrapped) phase lag, in samples/rad.
+function gd1(w, a) ( (1 - a*a)/(1 + 2*a*cos(w) + a*a); );
+function ph1(w, a) ( w - 2*atan(a*sin(w)/(1 + a*cos(w))); );
+// One-pole lowpass b/(1 - p z^-1): phase lag and group delay.
+function phlp(w, p) ( atan2(p*sin(w), 1 - p*cos(w)); );
+function gdlp(w, p) ( (p*cos(w) - p*p)/(1 - 2*p*cos(w) + p*p); );
+
+// Fit a one-pole lowpass to per-pass gains ga (at DC) and gb (at wb).
+// Matching at DC keeps the loop gain below one at every frequency.
+function op_fit(ga, gb, wb) local(R2, cb, A, B, disc)
+(
+  ga = min(ga, 0.9999995); gb = min(gb, ga);
+  R2 = (gb/ga)^2;
+  R2 > 0.999999 ? ( op_p = 0; op_b = ga; ) : (
+    cb = cos(wb); A = 1 - R2; B = 1 - R2*cb;
+    disc = max(0, B*B - A*A);
+    op_p = max(0, min(0.9995, (B - sqrt(disc))/A));
+    op_b = ga*(1 - op_p);
+  );
+);
+
+// Impulse-response energy of a feedback loop whose only non-allpass element
+// is the one-pole b/(1 - p z^-1): the mean over frequency of |H|^2/(1 - |H|^2),
+// which integrates in closed form to b^2 / sqrt((1 + p^2 - b^2)^2 - 4 p^2).
+function loop_energy(b, p) local(A) ( A = 1 + p*p - b*b; b*b/sqrt(max(0.000000000001, A*A - 4*p*p)); );
+
+// Stretched-allpass dispersion: difference in group delay between wa and wb.
+function disp_diff(a) ( dd_M*dd_K*(gd1(dd_K*dd_wa, a) - gd1(dd_K*dd_wb, a)); );
+
+// Solve the allpass coefficient that makes low frequencies (wa) lag high
+// ones (wb) by dlt samples. Stiff and flexural waves carry high frequencies
+// faster, so the answer is a negative coefficient. Clamped at disp_lim: past
+// it the delay piles up in the bass instead of spreading across the band.
+// Each stage can only contribute pi radians of phase, so a realistic
+// 100 ms chirp would need ~1000 stages; the clamp keeps the chirp's *shape*
+// and lets the recirculating echoes build its length.
+function disp_solve(dlt) local(lo, hi, mid)
+(
+  (dd_M <= 0 || dlt <= 0) ? 0 : (
+    lo = disp_lim; hi = 0;
+    disp_diff(lo) <= dlt ? lo : (
+      loop(40, mid = 0.5*(lo + hi); disp_diff(mid) > dlt ? lo = mid : hi = mid;);
+      0.5*(lo + hi);
+    );
+  );
+);
+
+// ---------------------------------------------------------------------------
+// Engine 1: waveguides (strings, wires, air columns, dispersive paths)
+// Parameters are passed in wg_* globals, physical (unscaled) values.
+// ---------------------------------------------------------------------------
+function wg_make() local(p, fa, fb, Ta, Tb, wa, wb, a, t60a, t60b, ga, gb, w1, rest, Dt, N, d, c, len, fmx, st)
+(
+  p = WG_BASE + n_wg*WG_STRIDE;
+  (n_wg < WG_MAX && !(do_alloc && alloc_full) && (do_alloc || n_wg < wg_cnt1)) ? (
+    fmx = 0.4*srate/wg_K;
+    fa = wg_fa*fsc; fb = min(wg_fb*fsc, fmx);
+    Ta = wg_Ta/fsc; Tb = wg_Tb/fsc;
+    wa = 2*$pi*fa/srate; wb = 2*$pi*fb/srate;
+
+    // dispersion
+    dd_M = wg_M; dd_K = wg_K; dd_wa = wa; dd_wb = wb;
+    a = disp_solve((Ta - Tb)*srate);
+
+    // losses: per-pass gains from T60 at the two reference frequencies
+    t60a = wg_t60a*tsc; t60b = min(t60a, wg_t60b*tsc*bm);
+    ga = 10^(-3*Ta/t60a); gb = 10^(-3*Tb/t60b);
+    op_fit(ga, gb, wb);
+
+    // tuning: pitched loops put the fundamental's total phase lag at 2pi
+    // (or pi for a loop with an inverting reflection); others meet the
+    // group delay at wb.
+    wg_pitched ? (
+      w1 = 2*$pi*wg_f1*fsc/srate;
+      rest = wg_phase - wg_M*ph1(wg_K*w1, a) - phlp(w1, op_p);
+      Dt = rest/w1;
+    ) : (
+      w1 = wb;
+      Dt = Tb*srate - wg_M*wg_K*gd1(wg_K*wb, a) - gdlp(wb, op_p);
+    );
+    N = floor(Dt - 0.5); N < 2 ? N = 2;
+    d = Dt - N; d < 0.1 ? d = 0.1;
+    c = (1 - d)/(1 + d);
+    // refine the Thiran fraction against its exact phase at the tuning point
+    wg_pitched ? loop(3,
+      d += (Dt - N) - ph1(w1, c)/w1; d = max(0.1, min(1.9, d)); c = (1 - d)/(1 + d);
+    );
+
+    do_alloc ? (
+      len = N + 8;
+      st = 2*wg_M*wg_K;
+      (pool_ptr + len < POOL_END && dpool + st < DPOOL_END) ? (
+        p[0] = pool_ptr; p[1] = len; p[2] = 0; pool_ptr += len;
+        p[13] = dpool; dpool += st;
+        p[5] = p[6] = p[9] = 0;
+      ) : alloc_full = 1;
+    ) : (
+      N = min(N, p[1] - 2);
+    );
+
+    !(do_alloc && alloc_full) ? (
+      p[3] = N; p[4] = c;
+      p[7] = op_b*wg_sign; p[8] = op_p;
+      p[10] = wg_M; p[11] = a; p[12] = wg_K;
+      p[14] = wg_gin; p[15] = wg_pl; p[16] = wg_pr;
+      p[17] = loop_energy(op_b, op_p);
+      n_wg += 1;
+    );
+  );
+);
+
+// Stiff string: f_n = n f0 sqrt(1 + B n^2). Local partial spacing gives the
+// loop group delay, T(n) = sqrt(1 + B n^2) / (f0 (1 + 2 B n^2)).
+function string_add(f0, B, eta, tmax, M, K, gin, pl, pr) local(n, ft)
+(
+  wg_pitched = 1; wg_phase = 2*$pi; wg_sign = 1;
+  wg_f1 = f0*sqrt(1 + B);
+  wg_fa = wg_f1; wg_Ta = sqrt(1 + B)/(f0*(1 + 2*B));
+  ft = min(4000, 0.3*srate/(fsc*K));
+  n = ft/f0;
+  loop(30, n = 0.5*(n + ft/(f0*sqrt(1 + B*n*n))););
+  n = max(n, 2);
+  wg_fb = n*f0*sqrt(1 + B*n*n); wg_Tb = sqrt(1 + B*n*n)/(f0*(1 + 2*B*n*n));
+  wg_t60a = t60e(wg_fa, eta, tmax); wg_t60b = t60e(wg_fb, eta, tmax);
+  wg_M = M; wg_K = K; wg_gin = gin; wg_pl = pl; wg_pr = pr;
+  wg_make();
+);
+
+// A round steel/metal wire from its geometry: f0 = sqrt(T/mu)/2L,
+// B = pi^3 E d^4 / (64 T L^2).
+function wire_add(L, d, T, rho, E, eta, tmax, M, K, gin, pl, pr) local(mu)
+(
+  mu = rho*$pi*d*d/4;
+  string_add(sqrt(T/mu)/(2*L), $pi^3*E*d^4/(64*T*L*L), eta, tmax, M, K, gin, pl, pr);
+);
+
+// Air column (from Trombolese): viscothermal boundary-layer attenuation,
+// alpha = sqrt(pi f) BLC / (a c), which also slows the wave slightly
+// (Re k = w/c + alpha), so the partials sit flat and a little stretched.
+function tube_alpha(f, a) ( sqrt($pi*f)*BLC/(a*C_AIR); );
+
+// ends: 2 = open-open, 1 = closed-open. wall multiplies the boundary-layer
+// loss for rough/porous walls (cardboard).
+function tube_add(L, a, ends, wall, gin, pl, pr) local(Le, f, k, ft, ga, gb, ka, rad_a, rad_b)
+(
+  Le = L + ends*0.6133*a;                     // unflanged end correction
+  k = ends == 2 ? 1 : 0.5;
+  f = k*C_AIR/(2*Le);
+  loop(8, f = k*C_AIR/(2*Le)/(1 + tube_alpha(f, a)*C_AIR/(2*$pi*f)););
+  wg_pitched = 1; wg_phase = ends == 2 ? 2*$pi : $pi; wg_sign = ends == 2 ? 1 : -1;
+  wg_f1 = f; wg_fa = f;
+  ft = min(4000, 0.3*srate/fsc);
+  wg_fb = ft;
+  wg_Ta = 2*Le*(1/C_AIR + tube_alpha(f, a)/(4*$pi*f));
+  wg_Tb = 2*Le*(1/C_AIR + tube_alpha(ft, a)/(4*$pi*ft));
+  // radiation at each open end: |R| ~ exp(-(ka)^2 / 2)
+  ka = 2*$pi*f*a/C_AIR;  rad_a = exp(-0.5*ka*ka*ends);
+  ka = 2*$pi*ft*a/C_AIR; rad_b = exp(-0.5*ka*ka*ends);
+  ga = exp(-2*Le*wall*tube_alpha(f, a))*rad_a;
+  gb = exp(-2*Le*wall*tube_alpha(ft, a))*rad_b;
+  wg_t60a = -6.9078*wg_Ta/log(min(ga, 0.99999));
+  wg_t60b = -6.9078*wg_Tb/log(max(min(gb, 0.99999), 0.000001));
+  wg_M = 2; wg_K = 1; wg_gin = gin; wg_pl = pl; wg_pr = pr;
+  wg_make();
+);
+
+// A non-pitched dispersive path: group delay Ta at fa, Tb at fb. The
+// allpasses are stretched (z^-K) so the chirp's budget is spent across
+// 0-6 kHz rather than the whole band; the images above 6 kHz are kept out
+// by the 4th-order lowpass on the waveguide input (wg_lp).
+function chirp_add(fa, Ta, fb, Tb, t60a, t60b, M, gin, pl, pr)
+(
+  wg_pitched = 0; wg_sign = 1; wg_phase = 2*$pi; wg_f1 = fa;
+  wg_fa = fa; wg_Ta = Ta; wg_fb = fb; wg_Tb = Tb;
+  wg_t60a = t60a; wg_t60b = t60b;
+  wg_M = M; wg_K = max(1, floor(srate/12000 + 0.5)); wg_gin = gin; wg_pl = pl; wg_pr = pr;
+  disp_lim = -0.72;
+  wg_make();
+  disp_lim = -0.9;
+);
+
+// ---------------------------------------------------------------------------
+// Engine 2: modal resonators (the strong, individually audible modes)
+// ---------------------------------------------------------------------------
+function mode_add(f, eta, tmax, amp, wl, wr) local(p, t60, r, th, fs)
+(
+  f = sqrt(f*f + curv_fr*curv_fr);            // curved shells stiffen low modes
+  fs = f*fsc;
+  (fs > 16 && fs < 0.45*srate && n_modes < MOD_MAX && (do_alloc || n_modes < mod_cnt1)) ? (
+    p = MOD_BASE + n_modes*MOD_STRIDE;
+    t60 = t60e(f, eta, tmax)*tsc*brt(fs);
+    r = exp(-6.907755/(t60*srate)); r = min(r, 0.9999999);
+    th = 2*$pi*fs/srate;
+    p[0] = 2*r*cos(th); p[1] = r*r;
+    do_alloc ? ( p[2] = 0; p[3] = 0; );
+    p[4] = amp*wl*sin(th); p[5] = amp*wr*sin(th);
+    p[6] = 2*r*th*sin(th);                    // d(coef)/d(relative pitch), for glide
+    p[7] = amp*wl; p[8] = amp*wr; p[9] = r;
+    n_modes += 1;
+  );
+);
+
+// Rectangular plate, simply supported, orthotropic in general:
+// f = (pi/2) sqrt( (Dx (m/Lx)^4 + 2H (mn/LxLy)^2 + Dy (n/Ly)^4) / (rho h) )
+// Driven at (0.37, 0.43), picked up at (0.21, 0.64) and (0.74, 0.27).
+function plate_modes(lx, ly, rh, dx, dy, dh, eta, tmax, count, tilt) local(i, j, m, n, best, bi, f0, amp)
+(
+  i = 0; m = 1;
+  loop(14, n = 1;
+    loop(14,
+      PLATE_TMP[i*3] = 0.5*$pi*sqrt((dx*(m/lx)^4 + 2*dh*(m*n/(lx*ly))^2 + dy*(n/ly)^4)/rh);
+      PLATE_TMP[i*3+1] = m; PLATE_TMP[i*3+2] = n; i += 1; n += 1;
+    );
+    m += 1;
+  );
+  f0 = 0;
+  loop(count,
+    best = 10^30; bi = -1; j = 0;
+    loop(196, PLATE_TMP[j*3] < best ? ( best = PLATE_TMP[j*3]; bi = j; ); j += 1;);
+    bi >= 0 ? (
+      m = PLATE_TMP[bi*3+1]; n = PLATE_TMP[bi*3+2]; PLATE_TMP[bi*3] = 10^31;
+      f0 == 0 ? f0 = best;
+      amp = sin(m*$pi*0.37)*sin(n*$pi*0.43)*(best/f0)^(-tilt);
+      mode_add(best, eta, tmax, amp, sin(m*$pi*0.21)*sin(n*$pi*0.64), sin(m*$pi*0.74)*sin(n*$pi*0.27));
+    );
+  );
+);
+
+// Modal density of a thin plate, modes per Hz: (S/2) sqrt(rho h / D).
+// It is independent of frequency, and it sets the FDN's total delay.
+function plate_density(s, rh, d) ( 0.5*s*sqrt(rh/d); );
+
+// Circular membrane with air loading: the air moving with a mode adds
+// roughly 2 rho_air / k of mass per unit area, which matters enormously for
+// something as light as cling film and a little for a drum skin.
+// f_mn = j_mn/(2 pi a) sqrt(T / (sigma + 2 rho_air a / j_mn))
+function membrane_modes(a, T, sigma, eta, tmax, count, tilt, radk) local(i, j, m, air, f, f0, amp, e)
+(
+  i = 0; f0 = 0;
+  loop(min(count, 24),
+    j = BESSEL_TAB[i*2]; m = BESSEL_TAB[i*2+1];
+    air = 2*RHO_AIR*a/j;
+    f = j/(2*$pi*a)*sqrt(T/(sigma + air));
+    f0 == 0 ? f0 = f;
+    e = eta + radk*air/(sigma + air);          // radiation damping follows air loading
+    amp = besj(m, j*0.30)*cos(m*0.8)*(f/f0)^(-tilt);
+    mode_add(f, e, tmax, amp, besj(m, j*0.55)*cos(m*0.2), besj(m, j*0.45)*cos(m*2.0));
+    m > 0 ? mode_add(f*1.002, e, tmax, besj(m, j*0.30)*sin(m*0.8)*(f/f0)^(-tilt),
+                     besj(m, j*0.55)*sin(m*0.2), besj(m, j*0.45)*sin(m*2.0));
+    i += 1;
+  );
+);
+
+// Cylindrical shell ring (bending) modes -- bottle walls, pipe walls, tubes:
+// f_n = (1/2pi) (h / (a^2 sqrt 12)) sqrt(E / (rho (1 - nu^2))) n (n^2 - 1) / sqrt(n^2 + 1)
+// Each n is a degenerate pair (cos/sin), split slightly, as in real bottles.
+function ring_modes(a, h, E, rho, nu, eta, tmax, nmax, amp) local(n, f, k)
+(
+  k = h/(a*a*sqrt(12))*sqrt(E/(rho*(1 - nu*nu)))/(2*$pi);
+  n = 2;
+  loop(nmax - 1,
+    f = k*n*(n*n - 1)/sqrt(n*n + 1);
+    mode_add(f, eta, tmax, amp/sqrt(n), cos(n*0.5), cos(n*2.2));
+    mode_add(f*1.004, eta, tmax, amp/sqrt(n), sin(n*0.5), sin(n*2.2));
+    n += 1;
+  );
+);
+
+// ---------------------------------------------------------------------------
+// Engine 3: dispersive feedback delay network (the dense diffuse field)
+// total: seconds of delay summed over the 8 lines = modal density (modes/Hz)
+// t60lo/t60hi at 200 Hz / 4 kHz; ratio: group delay at 200 Hz over 4 kHz;
+// spread: how unequal the line lengths are.
+// ---------------------------------------------------------------------------
+function fdn_setup(total, t60lo, t60hi, ratio, spread) local(i, fp, tot, sum, fb, wb, Tb, Ta, a, N, Pa, Pb, t60a, t60b, len, M)
+(
+  t60a = t60lo*tsc;
+  // modal overlap: once modes overlap there is no point in a longer network,
+  // and the lines must stay short against the decay or it sounds like echoes
+  tot = min(total/fsc, 0.3*t60a); tot = max(0.004, min(3.0, tot));
+  fb = min(4000*fsc, 0.4*srate); wb = 2*$pi*fb/srate;
+  sum = 0; i = 0;
+  loop(8, FDN_TMP[i] = exp(spread*0.8*(i - 3.5)/3.5); sum += FDN_TMP[i]; i += 1;);
+  fp = FDN_BASE; i = 0; M = fdn_M;
+  fdn_on = 1;
+  loop(8,
+    Tb = tot*FDN_TMP[i]/sum; Ta = Tb*ratio;
+    dd_M = M; dd_K = 1; dd_wa = 2*$pi*200*fsc/srate; dd_wb = wb;
+    a = disp_solve((Ta - Tb)*srate);
+    N = floor(Tb*srate - M*gd1(wb, a) + 0.5) + i; N < 2 ? N = 2;
+    N = N | 1;                                  // odd, and distinct by construction
+    Pa = N + M*gd1(0, a); Pb = N + M*gd1(wb, a);
+    t60b = min(t60a, t60hi*tsc*bm);
+    op_fit(10^(-3*Pa/(t60a*srate)), 10^(-3*Pb/(t60b*srate)), wb);
+    do_alloc ? (
+      len = N + 8;
+      (pool_ptr + len < POOL_END && dpool + 2*M < DPOOL_END) ? (
+        fp[0] = pool_ptr; fp[1] = len; fp[2] = 0; fp[6] = 0; pool_ptr += len;
+        fp[9] = dpool; dpool += 2*M;
+      ) : fdn_on = 0;
+    ) : (
+      fdn_on = fdn_ok1;
+      N = min(N, fp[1] - 2);
+    );
+    fp[3] = N; fp[4] = op_b; fp[5] = op_p; fp[7] = M; fp[8] = a;
+    fp[10] = loop_energy(op_b, op_p);
+    fp += FDN_STRIDE; i += 1;
+  );
+);
+
+// ---------------------------------------------------------------------------
+// The materials. All dimensions in metres, moduli in Pa, densities in kg/m^3.
+// ---------------------------------------------------------------------------
+function setup_material() local(i, D, rh, q, f, L, dia, B, note, fn, S, dist, Dx, Dy, lam, mm, a, h, p, al)
+(
+  n_wg = 0; n_modes = 0; fdn_on = 0; curv_fr = 0; fdn_M = 4;
+  x_wg = x_mod = x_fdn = 0; wg_mod = wg_fdn = mod_fdn = 0;
+  o_wg = o_mod = o_fdn = 0;
+  rat_amt = rat_wg = rat_fdn = rat_mod = rat_to_mod = rat_to_out = 0; rat_hp = 1000; rat_ref = 1;
+  crk_amt = crk_to_fdn = crk_to_mod = crk_to_out = 0;
+  shim_amt = 0; glide_amt = 0;
+  in_hp = 30; in_lp = 16000; wg_lp = 0; fdn_hp = 20;
+  out_hp = 20; out_lp = 20000; trim = 0;
+
+  mat == 0 ? (
+    // CHAIN LINK FENCE. Two 4 mm line wires tensioned to 1.5 kN between
+    // posts: stiff enough (B ~ 2e-3) that anything above ~700 Hz outruns
+    // the rest -- the "pew". The mesh links are 2.5 mm wire between knuckles,
+    // clamped-clamped beams (partials 1 : 2.757 : 5.404), and they are set
+    // ringing mostly by rattling against each other.
+    wire_add(3.0, 0.004, 1500, 7850, 200*10^9, 0.0015, 4, 48, KCH, 1, 0.95, 0.35);
+    wire_add(3.4, 0.004, 1500, 7850, 200*10^9, 0.0015, 4, 48, KCH, 1, 0.35, 0.95);
+    i = 0;
+    loop(8,
+      L = 0.055 + 0.03*i/7;
+      f = 22.373/(2*$pi*L*L)*sqrt(200*10^9*0.0025^2/(16*7850));
+      mode_add(f,       0.012, 0.5, 1,    sin(i*2.4 + 0.3), cos(i*1.7 + 0.5));
+      mode_add(f*2.757, 0.012, 0.5, 0.6,  sin(i*1.3 + 1.1), cos(i*2.9 + 0.2));
+      mode_add(f*5.404, 0.012, 0.5, 0.35, sin(i*3.1 + 0.7), cos(i*0.9 + 1.3));
+      i += 1;
+    );
+    fdn_setup(0.04, t60e(200, 0.003, 1.2), t60e(4000, 0.003, 1.2), 3, 1);
+    x_wg = 1; x_mod = 0.3; x_fdn = 1; wg_fdn = 0.3;
+    o_wg = 0.55; o_mod = 0.2; o_fdn = 0.25;
+    rat_amt = 1; rat_wg = 1; rat_fdn = 0.5; rat_to_mod = 1; rat_to_out = 0.5; rat_hp = 1500; rat_ref = 1.2;
+    wg_lp = 9000;
+    trim = trim_tab[0];
+  );
+
+  mat == 1 ? (
+    // ICE SHEET. 5 cm of lake ice. Flexural waves: group velocity
+    // c_g = 2 (D / rho h)^(1/4) sqrt(omega), so over 35-48 m to the shore and
+    // back the highs arrive first and the lows trail -- the famous "pew".
+    D = 9*10^9*0.05^3/(12*(1 - 0.33^2)); q = (D/(917*0.05))^0.25;
+    dist = 70;
+    chirp_add(250, dist/(2*q*sqrt(2*$pi*250)), 4000, dist/(2*q*sqrt(2*$pi*4000)),
+              t60e(250, 0.001, 1.8), t60e(4000, 0.001, 1.8), 96, 1, 1, 0.15);
+    dist = 96;
+    chirp_add(250, dist/(2*q*sqrt(2*$pi*250)), 4000, dist/(2*q*sqrt(2*$pi*4000)),
+              t60e(250, 0.001, 1.8), t60e(4000, 0.001, 1.8), 96, 1, 0.15, 1);
+    fdn_setup(0.25, t60e(200, 0.004, 2.5), t60e(4000, 0.004, 2.5), 4, 1);
+    x_wg = 1; x_fdn = 1; wg_fdn = 0.25;
+    o_wg = 0.7; o_fdn = 0.3;
+    wg_lp = 4500; out_lp = 9000; in_hp = 60;
+    trim = trim_tab[1];
+  );
+
+  mat == 2 ? (
+    // TENSION WIRE. 2.5 mm steel guy wires, 25 m and 31 m, at 2 kN
+    // (f0 ~ 4 Hz). Tension dominates below a few kHz; above that the wire's
+    // bending stiffness takes over and the highs race ahead. Steel wire loses
+    // very little, so it drones.
+    wire_add(25, 0.0025, 2000, 7850, 200*10^9, 0.0004, 15, 96, KCH, 1, 1, 0.2);
+    wire_add(31, 0.0025, 2000, 7850, 200*10^9, 0.0004, 15, 96, KCH, 1, 0.2, 1);
+    fdn_setup(0.03, t60e(200, 0.002, 2), t60e(4000, 0.002, 2), 2, 1);
+    x_wg = 1; x_fdn = 0.5; wg_fdn = 0.15;
+    o_wg = 0.85; o_fdn = 0.15;
+    wg_lp = 9000;
+    trim = trim_tab[2];
+  );
+
+  mat == 3 ? (
+    // GONG (tam-tam). 80 cm bronze, 3 mm. Free circular-plate modes,
+    // f = lambda^2 / (2 pi a^2) sqrt(D / rho h), lambda^2 from Leissa (nu ~ 0.33).
+    // The low modes boom; the dense field above is the FDN, and the
+    // quadratic coupling between them is the tam-tam's delayed shimmer.
+    a = 0.4; h = 0.003;
+    D = 110*10^9*h^3/(12*(1 - 0.34^2)); rh = 8600*h;
+    q = sqrt(D/rh)/(2*$pi*a*a);
+    i = 0;
+    loop(12,
+      lam = i==0?5.253:i==1?9.084:i==2?12.23:i==3?20.52:i==4?21.6:i==5?33.06:i==6?35.25:i==7?38.55:i==8?46.2:i==9?52.91:i==10?59.86:61.0;
+      mm  = i==0?2:i==1?0:i==2?3:i==3?1:i==4?4:i==5?5:i==6?2:i==7?0:i==8?6:i==9?3:i==10?1:7;
+      mode_add(q*lam, 0.0004, 40, cos(mm*1.1)/sqrt(1 + i), cos(mm*0.4), cos(mm*2.1));
+      mm > 0 ? mode_add(q*lam*1.003, 0.0004, 40, sin(mm*1.1)/sqrt(1 + i), sin(mm*0.4), sin(mm*2.1));
+      i += 1;
+    );
+    fdn_setup(plate_density($pi*a*a, rh, D), t60e(200, 0.0004, 40), t60e(4000, 0.0004, 40), 4, 1);
+    x_mod = 1; x_fdn = 1; mod_fdn = 0.2;
+    o_mod = 0.3; o_fdn = 0.7;
+    shim_amt = 1; glide_amt = 0.3;
+    trim = trim_tab[3];
+  );
+
+  mat == 4 ? (
+    // PVC PIPE. 1.5 m of 2" pipe (52 mm bore), open at both ends. The air
+    // column uses Trombolese's boundary-layer loss and end correction; the
+    // plastic wall adds a few dull, heavily damped ring modes.
+    tube_add(1.5,  0.026, 2, 1, 1, 1, 0.25);
+    tube_add(1.62, 0.026, 2, 1, 1, 0.25, 1);
+    ring_modes(0.03, 0.0035, 3*10^9, 1400, 0.4, 0.03, 0.5, 5, 0.5);
+    x_wg = 1; x_mod = 1;
+    o_wg = 0.8; o_mod = 0.2;
+    trim = trim_tab[4];
+  );
+
+  mat == 5 ? (
+    // GLASS. A free 800 x 600 x 5 mm pane of soda-lime glass: stiff, light,
+    // and very low loss (eta ~ 8e-4), so it rings long and bright.
+    D = 70*10^9*0.005^3/(12*(1 - 0.22^2)); rh = 2500*0.005;
+    plate_modes(0.8, 0.6, rh, D, D, D, 0.0008, 6, 32, 0.3);
+    fdn_setup(plate_density(0.48, rh, D), t60e(200, 0.0008, 6), t60e(4000, 0.0008, 6), 4.5, 1);
+    x_mod = 1; x_fdn = 1;
+    o_mod = 0.4; o_fdn = 0.6;
+    in_hp = 120;
+    trim = trim_tab[5];
+  );
+
+  mat == 6 ? (
+    // MARBLE. A 1 m x 60 cm x 2 cm slab. Thick and stiff, so its modes start
+    // high and sit far apart: a short, stony, pitched clink.
+    D = 55*10^9*0.02^3/(12*(1 - 0.26^2)); rh = 2700*0.02;
+    plate_modes(1.0, 0.6, rh, D, D, D, 0.003, 2.5, 32, 0.3);
+    fdn_setup(plate_density(0.6, rh, D), t60e(200, 0.003, 2.5), t60e(4000, 0.003, 2.5), 3, 1);
+    x_mod = 1; x_fdn = 1;
+    o_mod = 0.65; o_fdn = 0.35;
+    trim = trim_tab[6];
+  );
+
+  mat == 7 ? (
+    // CAR BODY PANEL. 0.8 mm steel door skin, 1.1 x 0.8 m, lightly damped
+    // by its seams and paint (eta ~ 0.003). Its curvature (radius ~2.5 m) stiffens
+    // everything below the ring frequency, ~340 Hz, so the low modes bunch
+    // up there: the "bonk".
+    D = 207*10^9*0.0008^3/(12*(1 - 0.29^2)); rh = 7850*0.0008;
+    curv_fr = 340;
+    plate_modes(1.1, 0.8, rh, D, D, D, 0.003, 2.5, 16, 0.4);
+    curv_fr = 0;
+    fdn_setup(plate_density(0.88, rh, D), t60e(200, 0.003, 2.5), t60e(4000, 0.003, 2.5), 4, 1);
+    fdn_hp = 340;
+    x_mod = 1; x_fdn = 1;
+    o_mod = 0.25; o_fdn = 0.75;
+    rat_amt = 0.4; rat_fdn = 1; rat_to_out = 0.6; rat_hp = 2500; rat_ref = 4;
+    trim = trim_tab[7];
+  );
+
+  mat == 8 ? (
+    // LEATHER. A 40 cm hide stretched like a frame drum: 1.2 mm, 1.08 kg/m^2,
+    // 1.5 kN/m. Leather's internal loss is enormous (eta ~ 0.06), so it is
+    // a thud, not a ring. Pitch sags as it decays (tension modulation).
+    membrane_modes(0.2, 1500, 1.08, 0.06, 0.8, 20, 0.5, 0.2);
+    fdn_setup(0.02, 0.25, 0.05, 1.5, 1);
+    x_mod = 1; x_fdn = 1;
+    o_mod = 0.8; o_fdn = 0.2;
+    glide_amt = 0.5; out_lp = 6000;
+    trim = trim_tab[8];
+  );
+
+  mat == 9 ? (
+    // WINE BOTTLE. 750 ml. Its air is a Helmholtz resonator,
+    // f = c/2pi sqrt(A / (V L_eff)) ~ 110 Hz; the body adds longitudinal
+    // and cross modes, and the 4 mm glass wall rings on top.
+    a = 0.0095; S = $pi*a*a; L = 0.08 + 1.46*a;
+    mode_add(C_AIR/(2*$pi)*sqrt(S/(0.00075*L)), 1/35, 3, 1, 1, 1);
+    mode_add(C_AIR/(2*0.2),   1/60, 2, 0.25, 0.7, -0.4);
+    mode_add(2*C_AIR/(2*0.2), 1/60, 2, 0.15, -0.3, 0.8);
+    mode_add(1.8412*C_AIR/(2*$pi*0.037), 1/80, 2, 0.15, 0.6, 0.5);
+    ring_modes(0.037, 0.004, 70*10^9, 2500, 0.22, 0.0008, 3, 6, 0.5);
+    fdn_setup(0.006, t60e(200, 0.0008, 2), t60e(4000, 0.0008, 2), 3, 1);
+    x_mod = 1; x_fdn = 1;
+    o_mod = 0.85; o_fdn = 0.15;
+    trim = trim_tab[9];
+  );
+
+  mat == 10 ? (
+    // PIANO STRING. Sustain pedal down: 24 strings, C2 to B3, free to ring
+    // in sympathy. Lengths and gauges follow a real scale; inharmonicity
+    // B = pi^3 E d^4 / (64 T L^2) comes out at 1e-4 to 3e-4, as measured on
+    // real pianos. The spruce soundboard is the diffuse part.
+    i = 0;
+    loop(24,
+      note = 36 + i; fn = 440*2^((note - 69)/12);
+      L = min(1.9, 0.62*2^((60 - note)*0.85/12));
+      dia = note < 48 ? 0.0012 : 0.001;
+      B = $pi^3*200*10^9*dia^4/(64*800*L*L);
+      string_add(fn/sqrt(1 + B), B, 0.00012, 18, 4, 1, 1, 0.5 + 0.45*sin(i*2.4), 0.5 - 0.45*sin(i*2.4));
+      i += 1;
+    );
+    D = 11*10^9*0.009^3/(12*(1 - 0.3^2)); rh = 440*0.009;
+    fdn_setup(plate_density(1.8, rh, D), t60e(200, 0.012, 1.2), t60e(4000, 0.012, 1.2), 3, 1);
+    x_wg = 1; x_fdn = 0.5; wg_fdn = 0.35;
+    o_wg = 0.75; o_fdn = 0.25;
+    trim = trim_tab[10];
+  );
+
+  mat == 11 ? (
+    // GUITAR STRING. Six steel strings in standard tuning on a 648 mm scale,
+    // ringing in sympathy and radiating through a spruce top whose first
+    // modes (air ~98 Hz, top ~204 Hz ...) colour everything.
+    i = 0;
+    loop(6,
+      note = i==0?40:i==1?45:i==2?50:i==3?55:i==4?59:64;
+      dia = i==0?0.00046:i==1?0.00043:i==2?0.0004:i==3?0.00043:i==4?0.00033:0.00025;
+      fn = 440*2^((note - 69)/12);
+      B = $pi^3*200*10^9*dia^4/(64*110*0.648*0.648);
+      string_add(fn/sqrt(1 + B), B, 0.0003, 6, 3, 1, 1, 0.5 + 0.4*(i - 2.5)/2.5, 0.5 - 0.4*(i - 2.5)/2.5);
+      i += 1;
+    );
+    i = 0;
+    loop(12,
+      f = i==0?98:i==1?204:i==2?226:i==3?381:i==4?437:i==5?552:i==6?650:i==7?780:i==8?920:i==9?1100:i==10?1450:2000;
+      q = i==0?20:i==1?30:i==2?25:i==3?30:i==4?35:i==5?35:i==6?40:i==7?40:i==8?40:i==9?45:i==10?40:35;
+      mode_add(f, 1/q, 1, 1/sqrt(1 + i), sin(i*2.1 + 0.4), cos(i*1.3 + 0.9));
+      i += 1;
+    );
+    fdn_setup(0.04, 0.5, 0.15, 2, 1);
+    x_wg = 1; x_mod = 0.4; x_fdn = 0.3; wg_mod = 0.6; wg_fdn = 0.1;
+    o_wg = 0.45; o_mod = 0.45; o_fdn = 0.1;
+    trim = trim_tab[11];
+  );
+
+  mat == 12 ? (
+    // VIOLIN STRING. G D A E on a 328 mm string length. The strings are
+    // heard mostly through the body: the air mode A0 (~275 Hz), the
+    // corpus modes (405-550 Hz) and the "bridge hill" around 2.5 kHz.
+    i = 0;
+    loop(4,
+      note = i==0?55:i==1?62:i==2?69:76;
+      fn = 440*2^((note - 69)/12);
+      B = i==0?0.00018:i==1?0.00011:i==2?0.00007:0.000055;
+      string_add(fn/sqrt(1 + B), B, 0.0015, 3, 3, 1, 1, 0.5 + 0.35*(i - 1.5)/1.5, 0.5 - 0.35*(i - 1.5)/1.5);
+      i += 1;
+    );
+    i = 0;
+    loop(12,
+      f = i==0?275:i==1?405:i==2?460:i==3?550:i==4?700:i==5?850:i==6?1000:i==7?1300:i==8?2100:i==9?2450:i==10?2800:3300;
+      q = i==0?18:i==1?25:i==2?30:i==3?30:i==4?30:i==5?30:i==6?35:i==7?35:i==8?20:i==9?18:i==10?18:20;
+      mode_add(f, 1/q, 1, (i >= 8 ? 0.7 : 1/sqrt(1 + 0.5*i)), sin(i*2.1 + 0.4), cos(i*1.3 + 0.9));
+      i += 1;
+    );
+    fdn_setup(0.025, 0.4, 0.1, 2, 1);
+    x_wg = 1; x_mod = 0.3; x_fdn = 0.2; wg_mod = 0.8; wg_fdn = 0.1;
+    o_wg = 0.25; o_mod = 0.65; o_fdn = 0.1;
+    trim = trim_tab[12];
+  );
+
+  mat == 13 ? (
+    // STEEL HANDPAN. D Kurd (D3 A3 Bb3 C4 D4 E4 F4 G4 A4). Each hammered
+    // tone field is tuned to fundamental, octave and compound fifth
+    // (1 : 2 : 3). The shell's port makes a Helmholtz "Gu" near 85 Hz.
+    i = 0;
+    loop(9,
+      note = i==0?50:i==1?57:i==2?58:i==3?60:i==4?62:i==5?64:i==6?65:i==7?67:69;
+      fn = 440*2^((note - 69)/12);
+      mode_add(fn,   0.0022, 8, 1,    cos(i*0.7), sin(i*0.7 + 0.5));
+      mode_add(2*fn, 0.0028, 8, 0.55, cos(i*0.7 + 0.3), sin(i*0.7 + 0.9));
+      mode_add(3*fn, 0.0035, 8, 0.35, cos(i*0.7 + 0.6), sin(i*0.7 + 1.3));
+      i += 1;
+    );
+    mode_add(85, 1/12, 2, 0.8, 0.8, 0.8);
+    D = 207*10^9*0.0012^3/(12*(1 - 0.29^2)); rh = 7850*0.0012;
+    fdn_setup(plate_density(0.44, rh, D), t60e(200, 0.003, 3), t60e(4000, 0.003, 3), 3, 1);
+    x_mod = 1; x_fdn = 1;
+    o_mod = 0.75; o_fdn = 0.25;
+    shim_amt = 0.3;
+    trim = trim_tab[13];
+  );
+
+  mat == 14 ? (
+    // TOILET ROLL TUBE. 10 cm of cardboard tube, 44 mm across, open both
+    // ends (f1 ~ 1.35 kHz). Cardboard is rough and porous, so the wall loss
+    // is several times a smooth pipe's, and its own ring modes are dead.
+    tube_add(0.10,  0.022,  2, 4, 1, 1, 0.3);
+    tube_add(0.104, 0.0225, 2, 4, 1, 0.3, 1);
+    ring_modes(0.0225, 0.0015, 3*10^9, 700, 0.3, 0.06, 0.3, 5, 0.6);
+    x_wg = 1; x_mod = 1;
+    o_wg = 0.75; o_mod = 0.25;
+    trim = trim_tab[14];
+  );
+
+  mat == 15 ? (
+    // ALUMINIUM FOIL. A 30 x 45 cm sheet, 16 microns. At that thickness the
+    // modal density is enormous, (S/2) sqrt(rho h / D) ~ 2.7 modes/Hz, but the
+    // crumples rub and the damping is so high the modes overlap into a
+    // sizzle. Loud input crinkles it: random crackle events.
+    D = 69*10^9*0.000016^3/(12*(1 - 0.33^2)); rh = 2700*0.000016;
+    fdn_setup(plate_density(0.135, rh, D), 0.35, 0.12, 5, 1);
+    i = 0;
+    loop(12,
+      mode_add(1500*1.19^i, 0.02, 0.2, 0.6, sin(i*2.3 + 0.2), cos(i*1.9 + 0.7));
+      i += 1;
+    );
+    x_fdn = 1; x_mod = 0.5;
+    o_fdn = 0.75; o_mod = 0.25;
+    crk_amt = 1; crk_to_fdn = 1; crk_to_mod = 0.5; crk_to_out = 0.3;
+    rat_amt = 0.3; rat_fdn = 1; rat_to_out = 0.5; rat_hp = 3000;
+    in_hp = 200; out_hp = 250;
+    trim = trim_tab[15];
+  );
+
+  mat == 16 ? (
+    // CLING FILM. 12 micron polyethylene stretched over a 30 cm bowl. It is
+    // so light (11 g/m^2) that the air it drags along outweighs it ~14 times:
+    // the modes drop to ~25 Hz and radiate their energy away at once. Loud
+    // input makes it slap the rim and buzz, like a kazoo.
+    membrane_modes(0.15, 15, 0.011, 0.12, 0.4, 20, 0.3, 0.3);
+    fdn_setup(0.03, 0.2, 0.08, 2, 1);
+    x_mod = 1; x_fdn = 0.6;
+    o_mod = 0.7; o_fdn = 0.3;
+    glide_amt = 1;
+    rat_amt = 1; rat_mod = 1; rat_to_out = 0.8; rat_hp = 400; rat_ref = 0.35;
+    trim = trim_tab[16];
+  );
+
+  mat == 17 ? (
+    // CORRUGATED TIN ROOF. 0.5 mm galvanised steel with 18 mm corrugations,
+    // screwed to purlins every 0.9 m. The ribs make it ~1800 times stiffer
+    // along them than across (Dx = E h d^2 / 8), an orthotropic plate; the
+    // loose fixings rattle.
+    h = 0.0005;
+    Dy = 207*10^9*h^3/(12*(1 - 0.3^2)); Dx = 207*10^9*h*0.018^2/8; rh = 7850*h;
+    plate_modes(0.9, 0.8, rh, Dx, Dy, Dy, 0.004, 2.5, 28, 0.2);
+    fdn_setup(0.5*5.8*sqrt(rh)/(Dx*Dy)^0.25, t60e(200, 0.004, 2.5), t60e(4000, 0.004, 2.5), 3, 1.6);
+    x_mod = 1; x_fdn = 1;
+    o_mod = 0.35; o_fdn = 0.65;
+    rat_amt = 1; rat_fdn = 1; rat_mod = 0.5; rat_to_out = 0.7; rat_hp = 1800; rat_ref = 1.4;
+    trim = trim_tab[17];
+  );
+
+  mat == 18 ? (
+    // METAL BARREL. A 205 litre steel drum (572 mm x 851 mm, 1.2 mm wall).
+    // The air inside is a closed cylinder,
+    // f = (c/2) sqrt((p/H)^2 + (alpha_mn / (pi a))^2); the lids are clamped
+    // circular plates; the shell is the dense metallic field.
+    a = 0.286; h = 0.851;
+    i = 0;
+    loop(40,
+      p = i % 5; mm = floor(i/5);
+      al = mm==0?0:mm==1?1.8412:mm==2?3.0542:mm==3?3.8317:mm==4?4.2012:mm==5?5.3176:mm==6?5.3314:6.4156;
+      f = 0.5*C_AIR*sqrt((p/h)^2 + (al/($pi*a))^2);
+      (f > 0 && f < 900) ? mode_add(f, 1/60, 3, 0.8/sqrt(1 + 0.3*i), cos(p*1.3 + mm*0.7), cos(p*0.4 + mm*2.2));
+      i += 1;
+    );
+    D = 207*10^9*0.0024^3/(12*(1 - 0.29^2)); rh = 7850*0.0012;
+    q = sqrt(D/rh)/(2*$pi*a*a);
+    i = 0;
+    loop(8,
+      lam = i==0?10.216:i==1?21.26:i==2?34.88:i==3?39.77:i==4?51.04:i==5?60.83:i==6?69.67:84.58;
+      mode_add(q*lam,      0.002, 3, 0.6/sqrt(1 + i), sin(i*1.7 + 0.3), cos(i*1.1 + 0.2));
+      mode_add(q*lam*0.98, 0.002, 3, 0.6/sqrt(1 + i), cos(i*2.3 + 0.1), sin(i*0.8 + 0.6));
+      i += 1;
+    );
+    D = 207*10^9*0.0012^3/(12*(1 - 0.29^2));
+    fdn_setup(plate_density(2*$pi*a*h, rh, D), t60e(200, 0.0015, 4), t60e(4000, 0.0015, 4), 3, 1);
+    fdn_hp = 120;
+    x_mod = 1; x_fdn = 1;
+    o_mod = 0.55; o_fdn = 0.45;
+    shim_amt = 0.3;
+    trim = trim_tab[18];
+  );
+);
+
+// ---------------------------------------------------------------------------
+// Normalisation: each engine is scaled to unit impulse-response energy, so
+// the per-material weights are real power proportions and materials with
+// wildly different decay times land at comparable levels.
+// ---------------------------------------------------------------------------
+function engine_norms() local(p, e, i)
+(
+  e = 0; p = WG_BASE;
+  loop(n_wg, e += p[14]*p[14]*0.5*(p[15]*p[15] + p[16]*p[16])*p[17]; p += WG_STRIDE;);
+  wg_norm = e > 0 ? 1/sqrt(e) : 0;
+  e = 0; p = MOD_BASE;
+  loop(n_modes, e += 0.5*(p[7]*p[7] + p[8]*p[8])/(2*max(0.000000001, 1 - p[9]*p[9])); p += MOD_STRIDE;);
+  mod_norm = e > 0 ? 1/sqrt(e) : 0;
+  e = 0; p = FDN_BASE; i = 0;
+  loop(8, e += p[10]; p += FDN_STRIDE; i += 1;);
+  e *= FDN_E_CAL/64;
+  fdn_norm = (fdn_on && e > 0) ? 1/sqrt(e) : 0;
+);
+
+// Per-material loudness trims (dB), measured with tools/check.py.
+trim_tab = 3200;
+i = 0;
+loop(19, trim_tab[i] = 0; i += 1;);
+trim_tab[0] = 0.4; trim_tab[1] = 2.1; trim_tab[2] = -4.7; trim_tab[3] = -6.0; trim_tab[4] = -10.3;
+trim_tab[5] = -6.1; trim_tab[6] = -2.1; trim_tab[7] = 2.6; trim_tab[8] = -15.6; trim_tab[9] = -17.1;
+trim_tab[10] = -2.9; trim_tab[11] = -5.2; trim_tab[12] = -5.7; trim_tab[13] = -5.3; trim_tab[14] = -14.0;
+trim_tab[15] = 3.0; trim_tab[16] = -4.7; trim_tab[17] = -7.6; trim_tab[18] = -11.8; 
+disp_lim = -0.9;
+FDN_E_CAL = 0.65;          // measured: mixing makes the lines' outputs partly coherent
+
+function lp1(fc) ( 1 - exp(-2*$pi*min(fc, 0.49*srate)/srate); );
+function hp1(fc) ( exp(-2*$pi*fc/srate); );
+
+// RBJ biquad coefficients into a 5-slot block: b0 b1 b2 a1 a2
+function bq_lp(o, fc, q) local(w, al, cw, a0)
+(
+  w = 2*$pi*min(fc, 0.45*srate)/srate; al = sin(w)/(2*q); cw = cos(w); a0 = 1 + al;
+  o[0] = (1 - cw)/2/a0; o[1] = (1 - cw)/a0; o[2] = (1 - cw)/2/a0; o[3] = -2*cw/a0; o[4] = (1 - al)/a0;
+);
+function bq_hp(o, fc, q) local(w, al, cw, a0)
+(
+  w = 2*$pi*min(fc, 0.45*srate)/srate; al = sin(w)/(2*q); cw = cos(w); a0 = 1 + al;
+  o[0] = (1 + cw)/2/a0; o[1] = -(1 + cw)/a0; o[2] = (1 + cw)/2/a0; o[3] = -2*cw/a0; o[4] = (1 - al)/a0;
+);
+BIQ = 3300;   // coefficient blocks: 0 wg lp, 5 user lowcut, 10 user highcut
+
+function rebuild(alloc) local(dm)
+(
+  mat = slider1 | 0;
+  size_ = slider3/100;
+  fsc = 2^(slider6/12)/size_;
+  KCH = max(1, floor(srate/24000 + 0.5));
+
+  // pass 1: default decay and brightness, allocating if the geometry changed
+  do_alloc = alloc; alloc_full = 0;
+  alloc ? ( pool_ptr = pool_base; dpool = DPOOL0; );
+  tsc = size_; bm = 1;
+  setup_material();
+  wg_cnt1 = n_wg; mod_cnt1 = n_modes; fdn_ok1 = fdn_on;
+  alloc ? (
+    pool_hi = max(pool_hi, pool_ptr);
+    memset(pool_base, 0, pool_hi - pool_base);
+    memset(DPOOL0, 0, DPOOL_END - DPOOL0);
+    pool_hi = pool_ptr;
+    memset(FDN_TMP, 0, 8);
+  );
+  engine_norms();
+
+  // pass 2: the user's decay and brightness, keeping the normalisation
+  dm = slider4/100;
+  (dm != 1 || slider5 != 0) ? (
+    do_alloc = 0; tsc = size_*dm; bm = 2^(slider5/50);
+    setup_material();
+  );
+
+  ihp_c = hp1(in_hp); ilp_c = lp1(in_lp);
+  fhp_c = hp1(fdn_hp);
+  ohp_c = hp1(out_hp); olp_c = out_lp >= 20000 ? 1 : lp1(out_lp);
+  rat_c = hp1(rat_hp);
+  wg_lp > 0 ? bq_lp(BIQ, wg_lp, 0.707);
+  trim_g = 10^(trim/20);
+  env_rel = exp(-1/(0.05*srate));
+);
+
+function update_io()
+(
+  mix_t = slider2/100;
+  wet_t = min(1, 2*mix_t); dry_t = min(1, 2*(1 - mix_t));
+  outg_t = 10^(slider12/20);
+  wid_t = slider9/100;
+  pd_n = floor(slider7*0.001*srate);
+  drive = slider8/100;
+  rat_g = rat_amt*rat_ref*(0.3 + 12*drive + 30*drive*drive);
+  rat_og = 1/sqrt(1 + 0.5*rat_g);
+  crk_rate = crk_amt*(0.2 + 2*drive)*1500/srate;
+  shim_g = shim_amt*1.2*drive*drive;
+  glide_k = 0.08*glide_amt*(0.2 + drive);
+  bq_hp(BIQ + 5, slider10, 0.707);
+  bq_lp(BIQ + 10, slider11, 0.707);
+  lc_on = slider10 > 20.5; hc_on = slider11 < 19999;
+);
+
+// pre-delay buffers sit at the bottom of the pool
+pd_len = floor(0.26*srate) + 4;
+pdL = POOL0; pdR = pdL + pd_len;
+pool_base = pdR + pd_len;
+memset(pdL, 0, 2*pd_len);
+pd_w = 0;
+pool_hi = pool_base;
+last_mat = -1;
+cnt = 0; dn = 0.00000000000000000001;
+mix_s = -1;
+
+@slider
+
+((slider1|0) != last_mat || slider3 != last_size || slider6 != last_tune) ? (
+  rebuild(1);
+) : (
+  (slider4 != last_decay || slider5 != last_bright) ? rebuild(0);
+);
+last_mat = slider1|0; last_size = slider3; last_tune = slider6;
+last_decay = slider4; last_bright = slider5;
+update_io();
+mix_s < 0 ? ( wet_s = wet_t; dry_s = dry_t; outg_s = outg_t; wid_s = wid_t; mix_s = 0; );
+
+@block
+
+sm = 1 - exp(-1/(0.02*srate));
+
+@sample
+
+wet_s += (wet_t - wet_s)*sm; dry_s += (dry_t - dry_s)*sm;
+outg_s += (outg_t - outg_s)*sm; wid_s += (wid_t - wid_s)*sm;
+
+inL = spl0; inR = spl1;
+
+// ---- pre-delay
+pdL[pd_w] = inL; pdR[pd_w] = inR;
+rp = pd_w - pd_n; rp < 0 ? rp += pd_len;
+xL = pdL[rp]; xR = pdR[rp];
+pd_w += 1; pd_w >= pd_len ? pd_w = 0;
+
+// ---- the transducer driving the material: mono drive plus a side component
+xm = 0.5*(xL + xR); xs = 0.5*(xL - xR);
+ih_y = ihp_c*(ih_y + xm - ih_x1); ih_x1 = xm;
+il_y += ilp_c*(ih_y - il_y);
+xb = il_y;
+is_y = ihp_c*(is_y + xs - is_x1); is_x1 = xs;
+xsb = is_y;
+
+ab = abs(xb); env_in = ab > env_in ? ab : env_in*env_rel;
+dn = -dn;
+cnt += 1; cnt >= 720720 ? cnt = 0;
+
+// ---- crackle (foil): random crinkle events, more of them when driven hard
+crk_amt > 0 ? (
+  crk = rand(1) < crk_rate*min(1, 4*env_in) ? (rand(2) - 1)*(0.2 + env_in) : 0;
+) : crk = 0;
+
+// ---- engine 1: waveguides
+wgL = wgR = 0;
+n_wg > 0 ? (
+  xw = xb*x_wg;
+  wg_lp > 0 ? (
+    q1 = BIQ[0]*xw + BIQ[1]*wq1x1 + BIQ[2]*wq1x2 - BIQ[3]*wq1y1 - BIQ[4]*wq1y2;
+    wq1x2 = wq1x1; wq1x1 = xw; wq1y2 = wq1y1; wq1y1 = q1;
+    q2 = BIQ[0]*q1 + BIQ[1]*wq2x1 + BIQ[2]*wq2x2 - BIQ[3]*wq2y1 - BIQ[4]*wq2y2;
+    wq2x2 = wq2x1; wq2x1 = q1; wq2y2 = wq2y1; wq2y1 = q2;
+    xw = q2;
+  );
+  xw += dn;
+  p = WG_BASE;
+  loop(n_wg,
+    buf = p[0]; len = p[1]; w = p[2];
+    r = w - p[3]; r < 0 ? r += len;
+    x = buf[r];
+    y = p[4]*(x - p[6]) + p[5]; p[5] = x; p[6] = y;     // Thiran fractional delay
+    y = p[7]*y + p[8]*p[9]; p[9] = y;                   // loss
+    M = p[10];
+    M > 0 ? (                                           // dispersion
+      a = p[11]; K = p[12]; s = p[13] + cnt % K; K2 = 2*K;
+      loop(M, xo = s[0]; yo = s[K]; z = a*(y - yo) + xo; s[0] = y; s[K] = z; y = z; s += K2;);
+    );
+    wgL += y*p[15]; wgR += y*p[16];
+    buf[w] = y + xw*p[14];
+    w += 1; w >= len ? w = 0; p[2] = w;
+    p += WG_STRIDE;
+  );
+  wgL *= wg_norm; wgR *= wg_norm;
+);
+wg_mono = 0.5*(wgL + wgR);
+
+// ---- engine 2: modes
+mL = mR = 0;
+n_modes > 0 ? (
+  din = xb*x_mod + wg_mono*wg_mod + rat*rat_og*rat_to_mod + crk*crk_to_mod + dn;
+  gd = glide_d;
+  p = MOD_BASE;
+  loop(n_modes,
+    y = (p[0] - gd*p[6])*p[2] - p[1]*p[3] + din;
+    p[3] = p[2]; p[2] = y;
+    mL += y*p[4]; mR += y*p[5];
+    p += MOD_STRIDE;
+  );
+  mL *= mod_norm; mR *= mod_norm;
+);
+mod_mono = 0.5*(mL + mR);
+glide_amt > 0 ? (
+  am = abs(mod_mono); env_b = am > env_b ? am : env_b*env_rel;
+  glide_d = min(0.06, glide_k*env_b);
+);
+
+// ---- tam-tam style shimmer: quadratic coupling from the strong modes
+shim_amt > 0 ? (
+  q = mod_mono*mod_mono*shim_g;
+  shim = 0.995*(shim + q - sq1); sq1 = q;
+);
+
+// ---- engine 3: dispersive FDN
+fL = fR = 0;
+fdn_on ? (
+  fin = xb*x_fdn + wg_mono*wg_fdn + mod_mono*mod_fdn + shim + crk*crk_to_fdn + dn;
+  fh_y = fhp_c*(fh_y + fin - fh_x1); fh_x1 = fin; fin = fh_y;
+  fsi = xsb*x_fdn;
+  fp = FDN_BASE; i = 0;
+  loop(8,
+    buf = fp[0]; r = fp[2] - fp[3]; r < 0 ? r += fp[1];
+    y = buf[r];
+    y = fp[4]*y + fp[5]*fp[6]; fp[6] = y;
+    M = fp[7];
+    M > 0 ? (
+      a = fp[8]; s = fp[9];
+      loop(M, xo = s[0]; yo = s[1]; z = a*(y - yo) + xo; s[0] = y; s[1] = z; y = z; s += 2;);
+    );
+    FDN_TMP[i] = y;
+    fp += FDN_STRIDE; i += 1;
+  );
+  h0 = FDN_TMP[0]; h1 = FDN_TMP[1]; h2 = FDN_TMP[2]; h3 = FDN_TMP[3];
+  h4 = FDN_TMP[4]; h5 = FDN_TMP[5]; h6 = FDN_TMP[6]; h7 = FDN_TMP[7];
+  fL = (h0 - h1 + h2 - h3 + h4 - h5 + h6 - h7)*0.35355339;
+  fR = (h0 + h1 - h2 - h3 + h4 + h5 - h6 - h7)*0.35355339;
+  // 8-point fast Walsh-Hadamard: lossless mixing
+  a0 = h0 + h1; a1 = h0 - h1; a2 = h2 + h3; a3 = h2 - h3;
+  a4 = h4 + h5; a5 = h4 - h5; a6 = h6 + h7; a7 = h6 - h7;
+  b0 = a0 + a2; b2 = a0 - a2; b1 = a1 + a3; b3 = a1 - a3;
+  b4 = a4 + a6; b6 = a4 - a6; b5 = a5 + a7; b7 = a5 - a7;
+  FDN_TMP[0] = b0 + b4; FDN_TMP[4] = b0 - b4; FDN_TMP[1] = b1 + b5; FDN_TMP[5] = b1 - b5;
+  FDN_TMP[2] = b2 + b6; FDN_TMP[6] = b2 - b6; FDN_TMP[3] = b3 + b7; FDN_TMP[7] = b3 - b7;
+  fin *= 0.35355339; fsi *= 0.35355339;
+  fp = FDN_BASE; i = 0;
+  loop(8,
+    buf = fp[0]; w = fp[2];
+    buf[w] = FDN_TMP[i]*0.35355339 + fin*FDN_SIGN[i] + fsi*FDN_SIGN[8 + i];
+    w += 1; w >= fp[1] ? w = 0; fp[2] = w;
+    fp += FDN_STRIDE; i += 1;
+  );
+  fL *= fdn_norm; fR *= fdn_norm;
+);
+fdn_mono = 0.5*(fL + fR);
+
+// ---- rattle: contact chatter once the vibration exceeds a gap
+rat_amt > 0 ? (
+  rs = (wg_mono*rat_wg + fdn_mono*rat_fdn + mod_mono*rat_mod)*rat_g;
+  dz = rs - max(-1, min(1, rs));
+  rat = rat_c*(rat + dz - rdz1); rdz1 = dz;
+) : rat = 0;
+
+// ---- mix the engines
+nl = rat*rat_og*rat_to_out + crk*crk_to_out;
+wL = wgL*o_wg + mL*o_mod + fL*o_fdn + nl;
+wR = wgR*o_wg + mR*o_mod + fR*o_fdn + nl;
+
+// material's own tone
+ohL = ohp_c*(ohL + wL - ohxL); ohxL = wL; wL = ohL;
+ohR = ohp_c*(ohR + wR - ohxR); ohxR = wR; wR = ohR;
+olL += olp_c*(wL - olL); wL = olL;
+olR += olp_c*(wR - olR); wR = olR;
+
+// user low/high cut
+lc_on ? (
+  o = BIQ + 5;
+  t = o[0]*wL + o[1]*lcxL1 + o[2]*lcxL2 - o[3]*lcyL1 - o[4]*lcyL2; lcxL2 = lcxL1; lcxL1 = wL; lcyL2 = lcyL1; lcyL1 = t; wL = t;
+  t = o[0]*wR + o[1]*lcxR1 + o[2]*lcxR2 - o[3]*lcyR1 - o[4]*lcyR2; lcxR2 = lcxR1; lcxR1 = wR; lcyR2 = lcyR1; lcyR1 = t; wR = t;
+);
+hc_on ? (
+  o = BIQ + 10;
+  t = o[0]*wL + o[1]*hcxL1 + o[2]*hcxL2 - o[3]*hcyL1 - o[4]*hcyL2; hcxL2 = hcxL1; hcxL1 = wL; hcyL2 = hcyL1; hcyL1 = t; wL = t;
+  t = o[0]*wR + o[1]*hcxR1 + o[2]*hcxR2 - o[3]*hcyR1 - o[4]*hcyR2; hcxR2 = hcxR1; hcxR1 = wR; hcyR2 = hcyR1; hcyR1 = t; wR = t;
+);
+
+// width, trim
+mid = 0.5*(wL + wR)*trim_g; sid = 0.5*(wL - wR)*wid_s*trim_g;
+wL = mid + sid; wR = mid - sid;
+
+// soft ceiling on the wet signal only: linear below 0.9, approaches 1.0
+aw = abs(wL); aw > 0.9 ? ( e = aw - 0.9; wL = sign(wL)*(0.9 + 0.1*e/(0.1 + e)); );
+aw = abs(wR); aw > 0.9 ? ( e = aw - 0.9; wR = sign(wR)*(0.9 + 0.1*e/(0.1 + e)); );
+
+spl0 = (inL*dry_s + wL*wet_s)*outg_s;
+spl1 = (inR*dry_s + wR*wet_s)*outg_s;
