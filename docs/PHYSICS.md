@@ -4,6 +4,8 @@ Every material in `Reverberator.jsfx` is specified by physical constants, and
 the plugin derives its resonances, decay times and echo density from them when
 the material is selected. This document gives the formulas, the numbers they
 produce, and the places where the model is knowingly simplified.
+`docs/MATERIALS.md` explains how each material's model was arrived at, and
+`docs/adr/` records the design decisions.
 
 SI units throughout. Air at 20 °C: c = 343.2 m/s, ρ = 1.204 kg/m³ (the same
 constants as Trombolese's `constants.py`).

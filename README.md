@@ -87,8 +87,15 @@ and the plugin *derives* the sound from them, using three engines:
 On top of those sit the level-dependent effects: contact rattle, crinkle
 crackle, the tam-tam's shimmer, and tension-modulation pitch glide.
 
-[`docs/PHYSICS.md`](docs/PHYSICS.md) has the formulas, the numbers for every
-material, and where the model is knowingly simplified.
+Further reading:
+
+- [`docs/MATERIALS.md`](docs/MATERIALS.md) — how the physics of each material
+  was worked out, with the numbers.
+- [`docs/PHYSICS.md`](docs/PHYSICS.md) — the formulas, reference tables and
+  known simplifications.
+- [`docs/adr/`](docs/adr/) — the design decisions and why they were made.
+- [`docs/SESSION-LOG.md`](docs/SESSION-LOG.md) — how the plugin was built,
+  including what went wrong.
 
 ## Relation to Trombolese
 
