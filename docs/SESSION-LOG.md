@@ -24,6 +24,7 @@ otherwise. Decisions are cross-referenced to `docs/adr/`.
 15. [Open questions for the user](#15-open-questions-for-the-user)
 16. [First run in REAPER, and the interface](#16-first-run-in-reaper-and-the-interface)
 17. [Checking against the official JSFX reference](#17-checking-against-the-official-jsfx-reference)
+18. [A twentieth material: bone](#18-a-twentieth-material-bone)
 
 ---
 
@@ -383,4 +384,51 @@ unchanged (all materials −24.0/−24.1 LUFS); the audio code was not touched.
 Noted, not changed: `@init` (and so a rebuild) runs on every transport
 start, which clears the reverb tail when playback starts — normal for a
 reverb; `ext_tail_size` could later tell REAPER how long the tail is.
+
+## 18. A twentieth material: bone
+
+The interface's 5 × 4 grid had one empty tile; the user asked for bone and
+pointed to their Wind-Instrument-Creator repository, also allowing a web
+search.
+
+**Sources.** Wind-Instrument-Creator defines bone as E = 18 GPa,
+ρ = 1900 kg/m³, η = 0.012 rising with frequency, `t_max` 2.5 s, and a rough
+bore (factor 1.6) for air columns. A web search gave cortical bone's
+longitudinal modulus as 15–24 GPa, wet bovine bone's loss factor under slow
+loading as 0.035–0.1, the in-vitro first bending resonance of a human tibia
+as 240–405 Hz with a second peak at 400–500 Hz, the Hohle Fels flute's
+dimensions, and rhythm bones' sizes. Two papers could not be fetched (the
+network proxy blocks their hosts); their figures are as summarised by search.
+
+**Design** (docs/MATERIALS.md §6.4, ADR 0014): an intact dried tibia,
+36 cm, because it has measurements to calibrate against.
+
+**Measured / computed.**
+- Plain free–free tube: f₁ = 559 Hz, above the measured range.
+- Finite-element beam (160 elements), first checked against the plain-tube
+  ratios 1 : 2.757 : 5.404 (exact), then with end masses: 0.1 → 431 Hz,
+  0.2 → 379, 0.3 → 351, 0.4 → 332, 0.5 → 319, 0.7 → 303 Hz. Chosen 0.35 ×
+  the 0.193 kg shaft per end (0.33 kg bone): **340 Hz**; ratios
+  3.23, 6.87, 11.95, 18.48, 26.44.
+- Non-round section: twin modes × 1.28 → 436 Hz, inside the measured
+  400–500 Hz second peak.
+- Rod models with the same ends: stretching 2648, 5868 Hz; twisting 849,
+  2919 Hz (ends' polar inertia 1.81 × the shaft's).
+- Sealed marrow cavity: air-column model extended to closed–closed
+  (`ends = 0`); 26 cm × 6.5 mm → 653.6 Hz (−17 cents from c/2L by the
+  boundary layer), T60 0.11 s.
+- Read back from the plugin: all 16 mode frequencies matched the
+  finite-element values to 0.1 Hz.
+- η = 0.02 (between Wind-Instrument-Creator's dry value and the wet DMA
+  range): T60 0.29 s at 340 Hz; broadband measured T60 0.28 s.
+- CPU 6.4–6.7 %. Loudness −25.0 LUFS untrimmed → trim +1.0, then −24.5
+  with the rattle active → +1.5 dB total.
+- Rattle sensitivity swept: `rat_ref` 1 → −9.5 / +1.2 / +6.9 dB at Drive
+  30/60/100 %; 2.5 → +0.4/…; 0.5 → −26.5/−5.3/+2.3; 0.35 → none/−10/−0.5;
+  **0.7 → −15.8 / −1.9 / +4.7 dB**, chosen (the fence is −17/−4/+3).
+- Interface: the tile loop now runs to 20; the "dense field" caption
+  switched from `%.2f` to `%.2g` because bone's 0.002 modes/Hz printed as
+  "0.00". `tools/gui_check.py` gained a test clicking the Bone tile (and the
+  "empty space" test moved, since its old spot is now the Bone tile):
+  10 tests, 0 failures.
 

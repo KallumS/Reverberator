@@ -19,7 +19,7 @@ Where things are documented:
 ## Layout
 
 ```
-Reverberator.jsfx      the plugin: physics helpers, 19 material setups, 3 engines
+Reverberator.jsfx      the plugin: physics helpers, 20 material setups, 3 engines
 docs/MATERIALS.md      per-material derivations
 docs/PHYSICS.md        formulas, derived and measured values, simplifications
 docs/adr/              architecture decision records 0001-0016 (index in README.md)
@@ -47,7 +47,7 @@ Python tools need numpy, scipy and matplotlib. The tools default to
 ```bash
 tools/build_host.sh                       # ~30 s, needs cmake + g++
 python3 tools/check.py --no-sweep         # ~1 min: loudness/peak/CPU/T60 table
-python3 tools/check.py                    # ~10 min: + 19 materials x 11 extremes x 3 sample rates
+python3 tools/check.py                    # ~10 min: + 20 materials x 11 extremes x 3 sample rates
 python3 tools/check.py --trims --no-sweep # after any physics change
 python3 tools/gui_check.py                # ~10 s: after any change to @gfx
 ```
@@ -59,8 +59,11 @@ Run the sweep in the background. It must report `0 failure(s)`. "note" lines
 
 1. Edit its block in `setup_material()`; keep the comment above it stating
    the object, its dimensions and why it sounds the way it does. Add a new
-   material at the end of the Material slider list and of `NAMES` in
-   `tools/analyse.py`, with a `trim_tab` entry.
+   material at the end of the Material slider list (and its range) and of
+   `NAMES` in `tools/analyse.py`, with a `trim_tab` entry (and the loop that
+   zeroes the table), name and description string slots (100+i, 150+i) and
+   the tile loop count in @gfx. The grid is 5 x 4 and now full: a 21st
+   material needs a new layout row.
 2. Read the derived values back (`tools/build/inspect`) and compare with a
    hand calculation.
 3. Look at it: `python3 tools/spectrograms.py out.png` (add `8=0` to exclude

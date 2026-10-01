@@ -26,6 +26,7 @@ to differ from what the user imagined.
 | PVC pipe | 1.5 m of 2" pipe, open both ends | A closed pipe | The common case; open both ends gives the full harmonic series |
 | Toilet roll tube | Empty cardboard tube, open both ends | — | — |
 | Steel handpan | D Kurd scale | Another scale | The most common handpan scale; Tuning transposes it |
+| Bone *(added 2026-10-01)* | An intact dried human tibia, 36 cm | A bone flute, a pair of rhythm bones, an animal femur | It has published in-vitro resonance measurements (240–405 Hz, second peak 400–500 Hz) to calibrate against; its sealed marrow cavity gives the flute-like air resonance, and the rhythm-bones clack is kept as the Drive behaviour |
 
 ## Consequences
 

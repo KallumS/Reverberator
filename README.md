@@ -31,6 +31,7 @@ compiling, no installer.
 | 17 | Cling film | Soft, rubbery, kazoo-like buzz | Film so light the air it drags outweighs it 14×; loud input makes it slap and buzz |
 | 18 | Corrugated tin roof | Rumbling, rattly, tinny | Ribbed 0.5 mm steel ~1800× stiffer along the ribs than across, with loose fixings that rattle |
 | 19 | Metal barrel | Boomy "inside an oil drum" resonance with steel ring | The air cavity of a 205 litre drum, its two lids, and the steel shell |
+| 20 | Bone | Dry, woody knock with a hollow, hooty core | A dried human shin bone: its hollow shaft bending and twisting (tuned against resonances measured on real tibiae), the air sealed in its marrow cavity, and at high Drive the clack of "rhythm bones" |
 
 ## Installing in REAPER
 
@@ -82,7 +83,7 @@ mixer panel, it shows a compact view: the material name and level meters.
 Changing **Material**, **Size** or **Tuning** rebuilds the object, so the tail
 restarts; the other controls change smoothly.
 
-All 19 materials are level-matched (to within 0.1 dB on a test mix), so
+All 20 materials are level-matched (to within 0.1 dB on a test mix), so
 switching between them doesn't jump in volume.
 
 ## How it works, briefly

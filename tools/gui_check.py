@@ -56,7 +56,9 @@ CASES = [
      lambda r: r["slider10"] == 1000 and r["lc_on"] == 1),
     ("drag High cut down", drag(HIGHCUT, 392, 450), (), 1, ("hc_on",),
      lambda r: r["slider11"] < 20000 and r["hc_on"] == 1),
-    ("click in empty space changes nothing", click(700, 190), (), 1, (),
+    ("click Bone tile (the 20th)", click(670, 187), (), 1, ("mat", "n_modes", "n_wg"),
+     lambda r: r["slider1"] == 19 and r["mat"] == 19 and r["n_modes"] == 16 and r["n_wg"] == 1),
+    ("click in empty space changes nothing", click(400, 208), (), 1, (),
      lambda r: r["slider1"] == 0 and r["slider2"] == 35),
 ]
 

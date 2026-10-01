@@ -1,7 +1,7 @@
 # How the physics of each material was worked out
 
 `docs/PHYSICS.md` is the reference: formulas, tables, simplifications. This
-document is the reasoning behind it: for each of the 19 materials, what was
+document is the reasoning behind it: for each of the 20 materials, what was
 asked, which physical system was chosen to answer it, the numbers that came
 out, and what changed once the result was measured.
 
@@ -66,6 +66,7 @@ to unit impulse-response energy (ADR 0007).
 | Spruce (along the grain) | 11 | 440 | 0.3 | 0.012 | piano soundboard |
 | Leather | — (membrane: tension 1.5 kN/m, 1.08 kg/m²) | | | 0.06 | leather |
 | Polyethylene film | — (membrane: tension 15 N/m, 0.011 kg/m²) | | | 0.12 | cling film |
+| Cortical bone (dry) | 18 | 1900 | 0.3 | 0.02 | bone |
 
 η, the loss factor, is the least certain column: it depends on mounting,
 coatings and temperature as much as on the material. It is also the most
@@ -533,6 +534,84 @@ on each maker's shell and port). The steel shell's dense field (0.44 m² of
 
 Sending sound through it makes the scale's notes bloom in sympathy — musically
 the most "tuned" material; the Tuning control changes its key.
+
+---
+
+### 6.4 Bone
+
+*Added after the first release, to fill the twentieth tile.*
+
+**Which bone.** Bone has made music for at least 35 000 years — the Hohle
+Fels vulture-bone flute is 21.8 cm long and about 8 mm across — and
+"rhythm bones", pairs of rib or shin bones 12–18 cm long, are clacked
+together as percussion. The model is a **dried human shin bone (tibia),
+36 cm, intact**, chosen because it has published vibration measurements to
+check against: in vitro, a tibia's first bending resonance is reported at
+240–405 Hz, with a second peak at 400–500 Hz (ADR 0014).
+
+**The material.** Cortical bone's stiffness along the bone is 15–24 GPa;
+18 GPa and a density of 1900 kg/m³ are used — the same values as the user's
+Wind-Instrument-Creator, which also models a bone bore's rough wall (factor
+1.6 on the boundary-layer loss). Damping is the uncertain part: wet bovine
+cortical bone under slow cyclic loading has a loss factor of 0.035–0.1, and
+Wind-Instrument-Creator uses 0.012 at 1 kHz rising with frequency. Dried
+bone at audio frequencies sits between: η = 0.02 is used, so the
+fundamental rings ~0.3 s and 2 kHz ~0.05 s — a knock, not a ring.
+
+**The shaft.** A tube of outer radius 11.5 mm and inner (marrow) radius
+6.5 mm. As a plain free–free tube (Euler–Bernoulli),
+
+    f₁ = (4.730)² / (2π L²) · √(E/ρ) · √((r_o² + r_i²)/4) = 559 Hz
+
+— well above the measured 240–405 Hz. The difference is the heavy, knobbly
+ends (epiphyses). A finite-element model of the tube (160 beam elements)
+with a point mass at each end reproduced the plain-tube ratios exactly
+(1 : 2.757 : 5.404) as a check, then with end masses of 0.35 × the shaft's
+0.19 kg each — a 0.33 kg bone overall, plausible for a dried tibia — gave:
+
+| | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| bending (Hz) | **340** | 1099 | 2340 | 4069 | 6290 | 9002 |
+| ratio | 1 | 3.23 | 6.87 | 11.95 | 18.48 | 26.44 |
+
+Heavy ends also stretch the overtones apart (3.23 rather than 2.76). A
+tibia's cross-section is roughly triangular, not round, so it bends more
+stiffly one way: each mode has a twin **1.28 × higher** (a second moment of
+area 1.64 × larger), putting the first twin at **436 Hz** — inside the
+measured 400–500 Hz second peak. The plugin stores the finite-element ratios
+as a table, like Leissa's plate eigenvalues for the gong.
+
+**Twisting and stretching.** The same finite-element approach for a rod
+with heavy ends: lengthwise modes at 2648 and 5868 Hz (plain rod: 4275,
+8550); twisting modes at 849 and 2919 Hz (plain: 2651, 5302) — twisting
+drops furthest because the wide ends (modelled as solid 30 mm-radius
+cylinders) have 1.8 × the shaft's rotational inertia.
+
+**The marrow cavity.** In an intact, dried bone the marrow cavity is sealed
+at both ends by spongy bone, so its air is a **closed–closed** column (the
+air-column model was extended for this: no end correction, no radiation, no
+inverting reflection): 26 cm of 6.5 mm radius gives c/2L = 660 Hz, pulled
+17 cents flat by the boundary layer — Trombolese's effect again — to 654 Hz,
+and the narrow, rough bore damps it in 0.11 s. Being sealed, it is heard
+through the wall, at a fifth of the output.
+
+**The clack.** Rhythm bones are two bones knocking together. At higher
+Drive, the bone's vibration exceeding a gap produces contact chatter from
+the modes to the output (never back into them, ADR 0008), calibrated like
+the other rattles: −16 dB under the clean sound at the default Drive, −2 dB
+at 60 %, +5 dB at full.
+
+**The wall's dense field** is small: the shaft's wall as a 5 mm plate of
+0.02 m² has a modal density of 0.002 per hertz, so the FDN is a few
+milliseconds and carries 15 % of the output for diffusion only.
+
+Sources consulted: cortical bone moduli and loss factor (Loughborough
+University repository, *Analysis of anisotropic viscoelastoplastic
+properties of cortical bone tissues*); tibia resonances (*Measuring
+Structural Dynamic Properties of Human Tibia by Modal Testing*, IMAC XXVI,
+2008, and related vibro-acoustic studies, as summarised in search results —
+the papers themselves could not be fetched); rhythm bones (Wikipedia,
+*Bones (instrument)*); the Hohle Fels flute (phys.org, 2009).
 
 ---
 

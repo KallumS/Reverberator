@@ -8,7 +8,7 @@ desc:Reverberator - Material Reverb (physically modelled)
 // loss factor -- and the resonances, decay times and echo density are derived
 // from them. See README.md and docs/PHYSICS.md for the reasoning and numbers.
 
-slider1:0<0,18,1{Chain link fence,Ice sheet,Tension wire,Gong,PVC pipe,Glass,Marble,Car body panel,Leather,Wine bottle,Piano string,Guitar string,Violin string,Steel handpan,Toilet roll tube,Aluminium foil,Cling film,Corrugated tin roof,Metal barrel}>-Material
+slider1:0<0,19,1{Chain link fence,Ice sheet,Tension wire,Gong,PVC pipe,Glass,Marble,Car body panel,Leather,Wine bottle,Piano string,Guitar string,Violin string,Steel handpan,Toilet roll tube,Aluminium foil,Cling film,Corrugated tin roof,Metal barrel,Bone}>-Material
 slider2:35<0,100,0.1>-Mix (%)
 slider3:100<25,400,1:log=100>-Size (%)
 slider4:100<10,400,1:log=100>-Decay (%)
@@ -225,15 +225,16 @@ function wire_add(L, d, T, rho, E, eta, tmax, M, K, gin, pl, pr) local(mu)
 // (Re k = w/c + alpha), so the partials sit flat and a little stretched.
 function tube_alpha(f, a) ( sqrt($pi*f)*BLC/(a*C_AIR); );
 
-// ends: 2 = open-open, 1 = closed-open. wall multiplies the boundary-layer
-// loss for rough/porous walls (cardboard).
+// ends: 2 = open-open, 1 = closed-open, 0 = closed-closed (a sealed cavity:
+// no end correction, no radiation, no inversion). wall multiplies the
+// boundary-layer loss for rough/porous walls (cardboard, bone).
 function tube_add(L, a, ends, wall, gin, pl, pr) local(Le, f, k, ft, ga, gb, ka, rad_a, rad_b)
 (
   Le = L + ends*0.6133*a;                     // unflanged end correction
-  k = ends == 2 ? 1 : 0.5;
+  k = ends == 1 ? 0.5 : 1;
   f = k*C_AIR/(2*Le);
   loop(8, f = k*C_AIR/(2*Le)/(1 + tube_alpha(f, a)*C_AIR/(2*$pi*f)););
-  wg_pitched = 1; wg_phase = ends == 2 ? 2*$pi : $pi; wg_sign = ends == 2 ? 1 : -1;
+  wg_pitched = 1; wg_phase = ends == 1 ? $pi : 2*$pi; wg_sign = ends == 1 ? -1 : 1;
   wg_f1 = f; wg_fa = f;
   ft = min(4000, 0.3*srate/fsc);
   wg_fb = ft;
@@ -756,6 +757,44 @@ function setup_material() local(i, D, rh, q, f, L, dia, B, note, fn, S, dist, Dx
     shim_amt = 0.3;
     trim = trim_tab[18];
   );
+
+  mat == 19 ? (
+    // BONE. A dried human shin bone (tibia), 36 cm, intact. The shaft is a
+    // tube of cortical bone (E = 18 GPa, rho = 1900, as in Wind-Instrument-
+    // Creator; 23 mm across with 5 mm walls). As a plain tube it would bend
+    // at 559 Hz, but the heavy knobbly ends (each ~0.35 x the shaft's mass)
+    // pull every mode down: a finite-element model of the tube with end
+    // masses puts the first at 340 Hz, inside the 240-405 Hz measured on real
+    // tibiae. The cross-section is not round, so each bending mode has a
+    // stiffer twin ~1.28 x higher (measured: a second peak at 400-500 Hz).
+    // Twisting and stretching add modes; the sealed marrow cavity is a
+    // closed air column with a rough bone wall. Driven hard, two bones knock
+    // together: the clack of "rhythm bones". Dry bone is lossy (eta ~ 0.02).
+    L = 0.36; a = 0.0115; h = 0.0065;                    // length, outer, inner radius
+    f = 22.373/(2*$pi*L*L)*sqrt(18*10^9/1900)*sqrt((a*a + h*h)/4);   // plain-tube bending f1
+    i = 0;
+    loop(6,
+      // finite-element frequencies of the heavy-ended tube / plain-tube f1
+      q = i==0?0.60938:i==1?1.96688:i==2?4.18833:i==3?7.28482:i==4?11.2601:16.1160;
+      mode_add(f*q,      0.02, 2.5, 1/sqrt(1 + i),   sin(i*1.9 + 0.4), cos(i*1.3 + 0.2));
+      mode_add(f*q*1.28, 0.02, 2.5, 0.8/sqrt(1 + i), cos(i*2.2 + 0.7), sin(i*0.9 + 0.5));
+      i += 1;
+    );
+    q = sqrt(18*10^9/(2*1.3*1900))/(2*L);               // plain torsion f1, c_T / 2L
+    mode_add(q*0.32034, 0.02, 2.5, 0.35, 0.6, -0.5);    // heavy ends' polar inertia lowers it
+    mode_add(q*1.10109, 0.02, 2.5, 0.25, -0.4, 0.7);
+    q = sqrt(18*10^9/1900)/(2*L);                        // plain longitudinal f1, c / 2L
+    mode_add(q*0.61938, 0.02, 2.5, 0.25, 0.5, 0.5);
+    mode_add(q*1.37255, 0.02, 2.5, 0.18, -0.5, 0.4);
+    tube_add(0.26, 0.0065, 0, 1.6, 1, 0.7, 0.7);         // sealed marrow cavity
+    D = 18*10^9*0.005^3/(12*(1 - 0.3^2));
+    fdn_setup(plate_density(2*$pi*0.009*L, 1900*0.005, D), t60e(200, 0.02, 2.5), t60e(4000, 0.02, 2.5), 2, 1);
+    x_mod = 1; x_wg = 1; x_fdn = 1;
+    o_mod = 0.65; o_wg = 0.2; o_fdn = 0.15;
+    rat_amt = 1; rat_mod = 1; rat_to_out = 0.7; rat_hp = 1200; rat_ref = 0.7;
+    in_hp = 60;
+    trim = trim_tab[19];
+  );
 );
 
 // ---------------------------------------------------------------------------
@@ -780,11 +819,11 @@ function engine_norms() local(p, e, i)
 // Per-material loudness trims (dB), measured with tools/check.py.
 trim_tab = 3200;
 i = 0;
-loop(19, trim_tab[i] = 0; i += 1;);
+loop(20, trim_tab[i] = 0; i += 1;);
 trim_tab[0] = 0.4; trim_tab[1] = 2.1; trim_tab[2] = -4.7; trim_tab[3] = -6.0; trim_tab[4] = -10.3;
 trim_tab[5] = -6.1; trim_tab[6] = -2.1; trim_tab[7] = 2.6; trim_tab[8] = -15.6; trim_tab[9] = -17.1;
 trim_tab[10] = -2.9; trim_tab[11] = -5.2; trim_tab[12] = -5.7; trim_tab[13] = -5.3; trim_tab[14] = -14.0;
-trim_tab[15] = 3.0; trim_tab[16] = -4.7; trim_tab[17] = -7.6; trim_tab[18] = -11.8; 
+trim_tab[15] = 3.0; trim_tab[16] = -4.7; trim_tab[17] = -7.6; trim_tab[18] = -11.8; trim_tab[19] = 1.5;
 disp_lim = -0.9;
 FDN_E_CAL = 0.65;          // measured: mixing makes the lines' outputs partly coherent
 
@@ -917,6 +956,7 @@ strcpy(115, "Aluminium foil");      strcpy(165, "A sizzly, crinkly, papery splas
 strcpy(116, "Cling film");          strcpy(166, "A soft, rubbery, kazoo-like buzz");
 strcpy(117, "Corrugated tin roof"); strcpy(167, "Rumbling, rattly and tinny");
 strcpy(118, "Metal barrel");        strcpy(168, "The boom of an oil drum, with a steel ring");
+strcpy(119, "Bone");                strcpy(169, "A dry, woody knock with a hollow, hooty core");
 strcpy(300, "MIX");     strcpy(301, "SIZE");      strcpy(302, "DECAY");    strcpy(303, "BRIGHT");
 strcpy(304, "TUNE");    strcpy(305, "PRE-DELAY"); strcpy(306, "DRIVE");    strcpy(307, "WIDTH");
 strcpy(308, "LOW CUT"); strcpy(309, "HIGH CUT");  strcpy(310, "OUTPUT");
@@ -1222,7 +1262,7 @@ ui_text(150 + ui_mat, ui_ox + 300*ui_s, 40*ui_s, 440*ui_s, 14*ui_s, 2);
 gfx_setfont(1);
 ui_tw = (720 - 4*6)/5;
 ui_i = 0;
-loop(19,
+loop(20,
   ui_tx = ui_ox + (20 + (ui_i % 5)*(ui_tw + 6))*ui_s;
   ui_ty = (64 + floor(ui_i/5)*36)*ui_s;
   ui_hot = ui_mx >= ui_tx && ui_mx < ui_tx + ui_tw*ui_s && ui_my >= ui_ty && ui_my < ui_ty + 30*ui_s;
@@ -1306,7 +1346,7 @@ gfx_setfont(3); ui_rgb(0.62, 0.65, 0.7, 1);
 n_modes > 0 ? ( sprintf(#ui_lbl, "%d resonances", n_modes); strcat(#ui_cap, #ui_lbl); );
 ui_nstr > 0 ? ( sprintf(#ui_lbl, "%s%d %s", strlen(#ui_cap) ? "  ·  " : "", ui_nstr, ui_nstr == 1 ? "string/air column" : "strings/air columns"); strcat(#ui_cap, #ui_lbl); );
 ui_nstr < n_wg ? ( sprintf(#ui_lbl, "%s%d dispersive paths", strlen(#ui_cap) ? "  ·  " : "", n_wg - ui_nstr); strcat(#ui_cap, #ui_lbl); );
-fdn_on ? ( sprintf(#ui_lbl, "%sdense field %.2f modes/Hz", strlen(#ui_cap) ? "  ·  " : "", fdn_disp_dens); strcat(#ui_cap, #ui_lbl); );
+fdn_on ? ( sprintf(#ui_lbl, "%sdense field %.2g modes/Hz", strlen(#ui_cap) ? "  ·  " : "", fdn_disp_dens); strcat(#ui_cap, #ui_lbl); );
 ui_text(#ui_cap, ui_px + 120*ui_s, ui_ry + 7*ui_s, 540*ui_s, 14*ui_s, 2);
 // wet output meters
 ui_i = 0;
