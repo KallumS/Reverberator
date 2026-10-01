@@ -5,7 +5,7 @@ import numpy as np
 NAMES = ["Chain link fence", "Ice sheet", "Tension wire", "Gong", "PVC pipe", "Glass",
          "Marble", "Car body panel", "Leather", "Wine bottle", "Piano string",
          "Guitar string", "Violin string", "Steel handpan", "Toilet roll tube",
-         "Aluminium foil", "Cling film", "Corrugated tin roof", "Metal barrel"]
+         "Aluminium foil", "Cling film", "Corrugated tin roof", "Metal barrel", "Bone"]
 
 
 def load(path):

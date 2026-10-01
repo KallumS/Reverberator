@@ -77,6 +77,7 @@ shapes used:
 | Closed cylindrical cavity | f = (c/2) sqrt( (p/H)² + (α_mn / πa)² ) | barrel air |
 | Helmholtz resonator | f = (c/2π) sqrt( A / (V L_eff) ) | wine bottle, handpan port |
 | Clamped–clamped beam | 1 : 2.757 : 5.404 | chain-link mesh links |
+| Free–free tube with heavy ends | finite-element table: 1 : 3.23 : 6.87 : 11.95 : 18.48 : 26.44 × 0.609 f₁(plain tube) | bone shaft (and rods for its twisting/stretching) |
 
 with D = E h³ / 12(1 − ν²) for a plate.
 
@@ -126,6 +127,7 @@ glass sound like glass and leather sound like leather.
 | Car panel steel | 0.003 | 1.5 s | 0.17 s |
 | Leather | 0.06 (+ radiation) | ~0.1 s | — |
 | Cling film | 0.12 (+ air radiation) | ~0.05 s | — |
+| Dry bone | 0.02 | 0.45 s | 0.03 s |
 
 ### Level-dependent behaviour (the Drive control)
 
@@ -168,6 +170,7 @@ Values derived by the plugin at 48 kHz, Size 100 %, Tuning 0.
 | Cling film | a = 0.15 m, 12 µm LDPE, 15 N/m | (0,1) 25–29 Hz after air loading |
 | Corrugated tin roof | 0.5 mm steel, 18 mm ribs, 0.9 m purlin bays | Dx/Dy ≈ 1800; lowest mode 64 Hz; FDN 393 ms |
 | Metal barrel | 572 × 851 mm, 1.2 mm steel | cavity 201, 352, 403 Hz…; lids from 102 Hz; FDN 412 ms |
+| Bone | dried tibia, 360 mm, radii 11.5 / 6.5 mm, E = 18 GPa, ρ = 1900, end masses 0.35 × shaft | bending 340 (twin 436), 1099, 2340 Hz…; twisting 849 Hz; stretching 2648 Hz; sealed cavity 654 Hz |
 
 ## 3. Measured behaviour
 
@@ -197,6 +200,7 @@ percentage of real time.
 | Cling film | 0.15 s | 8 % |
 | Corrugated tin roof | 1.6 s | 7 % |
 | Metal barrel | 2.1 s | 8 % |
+| Bone | 0.28 s | 7 % |
 
 ## 4. Loudness
 

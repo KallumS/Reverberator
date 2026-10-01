@@ -19,14 +19,18 @@ Where things are documented:
 ## Layout
 
 ```
-Reverberator.jsfx      the plugin: physics helpers, 19 material setups, 3 engines
+Reverberator.jsfx      the plugin: physics helpers, 20 material setups, 3 engines
 docs/MATERIALS.md      per-material derivations
 docs/PHYSICS.md        formulas, derived and measured values, simplifications
-docs/adr/              architecture decision records 0001-0015 (index in README.md)
+docs/adr/              architecture decision records 0001-0016 (index in README.md)
+docs/gui.png           interface screenshot used by README (regenerate with tools/build/gui)
 docs/SESSION-LOG.md    session history
 tools/build_host.sh    builds a headless JSFX host (ysfx) into tools/build/
 tools/render.cpp       raw float32 stereo in -> out through the plugin
 tools/inspect.cpp      dump plugin variables/memory after N blocks
+tools/gui.cpp          run @gfx headlessly: draw to an image, simulate mouse, print sliders/vars
+tools/gui_png.py       convert gui's raw BGRA output to PNG
+tools/gui_check.py     simulated-mouse tests of the interface (must report 0 failures)
 tools/check.py         loudness table, trim suggestions, stability sweep
 tools/render_demos.py  WAV demos of every material
 tools/spectrograms.py  impulse-response spectrogram grid
@@ -43,8 +47,9 @@ Python tools need numpy, scipy and matplotlib. The tools default to
 ```bash
 tools/build_host.sh                       # ~30 s, needs cmake + g++
 python3 tools/check.py --no-sweep         # ~1 min: loudness/peak/CPU/T60 table
-python3 tools/check.py                    # ~10 min: + 19 materials x 11 extremes x 3 sample rates
+python3 tools/check.py                    # ~10 min: + 20 materials x 11 extremes x 3 sample rates
 python3 tools/check.py --trims --no-sweep # after any physics change
+python3 tools/gui_check.py                # ~10 s: after any change to @gfx
 ```
 
 Run the sweep in the background. It must report `0 failure(s)`. "note" lines
@@ -54,8 +59,11 @@ Run the sweep in the background. It must report `0 failure(s)`. "note" lines
 
 1. Edit its block in `setup_material()`; keep the comment above it stating
    the object, its dimensions and why it sounds the way it does. Add a new
-   material at the end of the Material slider list and of `NAMES` in
-   `tools/analyse.py`, with a `trim_tab` entry.
+   material at the end of the Material slider list (and its range) and of
+   `NAMES` in `tools/analyse.py`, with a `trim_tab` entry (and the loop that
+   zeroes the table), name and description string slots (100+i, 150+i) and
+   the tile loop count in @gfx. The grid is 5 x 4 and now full: a 21st
+   material needs a new layout row.
 2. Read the derived values back (`tools/build/inspect`) and compare with a
    hand calculation.
 3. Look at it: `python3 tools/spectrograms.py out.png` (add `8=0` to exclude
@@ -79,6 +87,51 @@ Run the sweep in the background. It must report `0 failure(s)`. "note" lines
 - **No scientific notation.** `1.5e-5` is a syntax error. Write decimals.
 - **Functions are inlined, variables not declared `local` are global.**
 - Compiling is not evidence. Render it (`tools/build/render`) and look.
+
+## GUI (@gfx) rules — ADR 0016
+
+- **@gfx runs on the UI thread and shares every variable with the audio
+  code.** Every variable it uses is prefixed `ui_`. Function `local()`s are
+  kept per code section (so they are not the risk), but any *global* a
+  function touches is shared, so the GUI calls only `ui_` functions, which
+  touch only `ui_` globals. Read engine memory, never write it.
+- **Moving a slider from @gfx does not run @slider.** Use `ui_setslider()`,
+  which calls `slider_automate` and sets `ui_changed`; `@block` then runs
+  `apply_params()`.
+- Sliders are hidden with a `-` prefix on their names; keep it on any new
+  slider, and add a knob or control for it in the GUI.
+- `mouse_wheel` is 120 per notch in REAPER; ysfx (and so `tools/build/gui`)
+  uses 512.
+- Check GUI changes by rendering:
+  `tools/build/gui Reverberator.jsfx out.bgra 760 480 2 1=<material>` then
+  `python3 tools/gui_png.py out.bgra 1520 960 out.png`, and look at it.
+  Simulate clicks with `EVENTS="x,y,buttons;..."` and check engine variables
+  with `VARS=`.
+
+## Facts checked against the official JSFX reference
+
+The user supplied REAPER's JSFX Programming Reference and API list (not
+committed: they are REAPER's documents). Points that matter here:
+
+- `@init` runs on load, sample-rate change **and every transport start**, and
+  all variables and memory are zeroed before it (unless `@serialize` exists).
+  So every table must be rebuilt in `@init`, and pressing play restarts the
+  tail — expected. `@slider` always runs after `@init`.
+- `==` and `!=` compare with a 0.00001 tolerance; `&&`/`||` and `|`/`&`/`~`
+  have equal precedence within each group — parenthesise mixtures.
+- Memory index = value + 0.00001, truncated: index with integers.
+- Functions may call only functions declared *before* them; 0–40 parameters;
+  `local()`s persist across calls and are kept per code section.
+- `slider_automate(mask[, end_touch])`: mask bit n−1 for slider n;
+  `end_touch` (6.74+) closes a touch-automation pass — call it when a GUI
+  gesture ends (`ui_endtouch`).
+- `gfx_setfont` sizes must be 8–100; `gfx_drawstr` clips to its box unless
+  flag 256; `mouse_cap` 8 = Shift, 4 = Ctrl/Cmd, 16 = Alt/Option;
+  `mouse_wheel` is 120 per notch and must be reset by the script;
+  `gfx_ext_retina` doubles `gfx_w/gfx_h` on macOS only; `gfx_ext_flags & 1`
+  means embedded in the track/mixer panel.
+- `gfx_rect`'s 5th argument (filled) is optional and defaults to filled; we
+  omit it.
 
 ## Design rules
 

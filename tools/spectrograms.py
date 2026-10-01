@@ -24,7 +24,7 @@ def main(out_png, seconds=4.0, extra=()):
     with tempfile.TemporaryDirectory() as tmp:
         imp = os.path.join(tmp, "imp.f32")
         test_signals.write_f32(imp, test_signals.impulse(seconds))
-        for m, ax in zip(range(19), axes.flat):
+        for m, ax in zip(range(len(NAMES)), axes.flat):
             out = os.path.join(tmp, "o.f32")
             subprocess.run([RENDER, PLUGIN, imp, out, "48000", f"1={m}", "2=100", *extra],
                            capture_output=True, check=True)
@@ -34,7 +34,8 @@ def main(out_png, seconds=4.0, extra=()):
             ax.set_ylim(0, 12)
             ax.set_title(NAMES[m], loc="left")
             ax.set_ylabel("kHz")
-    axes.flat[-1].axis("off")
+    for ax in list(axes.flat)[len(NAMES):]:
+        ax.axis("off")
     fig.tight_layout()
     fig.savefig(out_png, dpi=60)
 

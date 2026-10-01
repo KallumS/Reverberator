@@ -22,6 +22,9 @@ otherwise. Decisions are cross-referenced to `docs/adr/`.
 13. [Documentation pass](#13-documentation-pass)
 14. [Dead ends and corrections](#14-dead-ends-and-corrections)
 15. [Open questions for the user](#15-open-questions-for-the-user)
+16. [First run in REAPER, and the interface](#16-first-run-in-reaper-and-the-interface)
+17. [Checking against the official JSFX reference](#17-checking-against-the-official-jsfx-reference)
+18. [A twentieth material: bone](#18-a-twentieth-material-bone)
 
 ---
 
@@ -290,4 +293,142 @@ code gives 1.5 s (fixed during the first session).
 - Listening feedback per material: decay length, brightness, rattle amount.
 - Recordings of any real object tapped, to compare with the model.
 - Whether a CLAP version is wanted, for use outside REAPER.
-- The plugin has not yet been run inside REAPER itself.
+- The plugin's custom interface has not yet been seen inside REAPER (§16).
+
+## 16. First run in REAPER, and the interface
+
+The user loaded the plugin in REAPER (macOS). It loaded and ran — REAPER's
+performance readout showed **3.3 %** for the chain link fence — but showed
+REAPER's default JSFX view, a list of sliders, which the user read as "no
+GUI". That was accurate: no `@gfx` section had been written.
+
+**Verification first.** ysfx was rebuilt with graphics (`-DYSFX_GFX=ON`,
+linking freetype and fontconfig) and a third host, `tools/gui.cpp`, written:
+it runs `@gfx` into a framebuffer at any size and Retina scale, replays
+mouse events, steps audio in between, and prints sliders and chosen engine
+variables. `tools/gui_png.py` turns the framebuffer into a PNG.
+
+**Design** (ADR 0016): material tiles, the material's one-line description,
+a "what's ringing" plot of every resonance (height = T60, glow = current
+amplitude, recovered from each resonator's two state values as
+√((y₁² + y₂² − 2y₁y₂ cos θ)/sin²θ)), wet meters, and eleven knobs. The
+default sliders are hidden with a `-` prefix.
+
+**Thread safety.** `@gfx` shares all global variables with the audio code,
+so every GUI name is `ui_`-prefixed and the GUI calls only `ui_` functions —
+the same lesson as §6, applied before it could bite. (This section first
+said EEL2 locals are shared static storage; the official reference, read in
+§17, says they are kept per code section. The `ui_` rule stands, for the
+globals.)
+Because `@slider` does not run for GUI changes, its body became
+`apply_params()`, called from `@slider` and from `@block` when `ui_changed`
+is set.
+
+Engine changes to feed the display: modes store frequency and T60
+(`p[10]`, `p[11]`); waveguides store fundamental and T60 (`p[18]`, `p[19]`)
+and a peak-hold of their output (`p[20]`), so `WG_STRIDE` grew from 20 to 24;
+the FDN publishes its density and T60; `@sample` keeps wet and dense-field
+peak meters.
+
+**Measured.**
+- First render was usable as drawn; polish: the dense-field band was made
+  translucent with an edge line, and knob labels moved to a smaller bold
+  font after "PRE-DELAY" nearly touched its neighbours.
+- Interactions, each checked against engine variables: clicking the Glass
+  tile → `mat` = 5, 32 modes built; dragging Mix up 100 px → 85 %,
+  `wet_t` = 1, `dry_t` = 0.3; shift-drag 100 px → +5 %; double-click on
+  Decay at 200 % → 100 %, `tsc` = 1; Low cut dragged to the top → 1000 Hz,
+  filter on; the same tile click at Retina scale 2 → correct material.
+- The wheel first appeared to jump to the maximum: ysfx scales a wheel step
+  to 512 units where REAPER uses 120. One ysfx step = 4.3 REAPER notches;
+  the plugin follows REAPER.
+- Rendered at 600 × 380 and 1100 × 500: scales and centres correctly.
+- Full check and stability sweep re-run after the engine changes: loudness
+  table unchanged (all −24.0 ± 0.1 LUFS), CPU unchanged (2.3–17.1 %),
+  **0 failures**.
+
+## 17. Checking against the official JSFX reference
+
+Before testing the interface in REAPER, the user supplied REAPER's JSFX
+Programming Reference (10 pages) and its API function list. The plugin was
+read against all of it. Confirmed correct: slider syntax (`:log=X`, `-`
+hiding, enums), the ~8.4 M-slot memory limit (the pool ends at 8.3 M), string
+slots 0–1023, `slider(i)` as an lvalue, the `slider_automate` mask
+(bit n−1 for slider n), `mouse_cap` 8 = Shift, `mouse_wheel` 120 per notch,
+`gfx_ext_retina` doubling `gfx_w` on macOS, `gfx_drawstr` flags, `gfx_arc`
+and `gfx_circle` signatures, function declaration order, and every mixed
+`&&`/`||` in the code (all parenthesised — the reference warns they have
+equal precedence).
+
+Found and fixed:
+
+1. **Touch automation was never ended.** `slider_automate(mask, 1)` (6.74+)
+   ends a touch pass; GUI gestures now call it when they finish.
+2. **Font sizes below 8.** The reference allows 8–100; at small window sizes
+   the knob labels went to 5. Now clamped.
+3. **Text could clip.** `gfx_drawstr` clips to its box; several boxes were
+   only a few pixels taller than the nominal font size, and REAPER's macOS
+   fonts are taller than the test host's. Non-centred text now gets
+   `gfx_texth` of extra room below.
+4. **`gfx_rect`'s fifth argument** is in the API list but not the JSFX page;
+   it was always 1 (filled), which is the default, so it is now omitted.
+5. **A wrong statement in the docs**: §16, ADR 0016 and CLAUDE.md said EEL2
+   locals are shared static storage. The reference says they are kept per
+   code section. The `ui_` rule stands — it protects the shared *globals*.
+
+Added, prompted by the reference: a compact view when embedded in REAPER's
+track or mixer panel (`gfx_ext_flags & 1`); and `tools/gui_check.py`, nine
+simulated-mouse tests checking engine variables (0 failures). Loudness is
+unchanged (all materials −24.0/−24.1 LUFS); the audio code was not touched.
+
+Noted, not changed: `@init` (and so a rebuild) runs on every transport
+start, which clears the reverb tail when playback starts — normal for a
+reverb; `ext_tail_size` could later tell REAPER how long the tail is.
+
+## 18. A twentieth material: bone
+
+The interface's 5 × 4 grid had one empty tile; the user asked for bone and
+pointed to their Wind-Instrument-Creator repository, also allowing a web
+search.
+
+**Sources.** Wind-Instrument-Creator defines bone as E = 18 GPa,
+ρ = 1900 kg/m³, η = 0.012 rising with frequency, `t_max` 2.5 s, and a rough
+bore (factor 1.6) for air columns. A web search gave cortical bone's
+longitudinal modulus as 15–24 GPa, wet bovine bone's loss factor under slow
+loading as 0.035–0.1, the in-vitro first bending resonance of a human tibia
+as 240–405 Hz with a second peak at 400–500 Hz, the Hohle Fels flute's
+dimensions, and rhythm bones' sizes. Two papers could not be fetched (the
+network proxy blocks their hosts); their figures are as summarised by search.
+
+**Design** (docs/MATERIALS.md §6.4, ADR 0014): an intact dried tibia,
+36 cm, because it has measurements to calibrate against.
+
+**Measured / computed.**
+- Plain free–free tube: f₁ = 559 Hz, above the measured range.
+- Finite-element beam (160 elements), first checked against the plain-tube
+  ratios 1 : 2.757 : 5.404 (exact), then with end masses: 0.1 → 431 Hz,
+  0.2 → 379, 0.3 → 351, 0.4 → 332, 0.5 → 319, 0.7 → 303 Hz. Chosen 0.35 ×
+  the 0.193 kg shaft per end (0.33 kg bone): **340 Hz**; ratios
+  3.23, 6.87, 11.95, 18.48, 26.44.
+- Non-round section: twin modes × 1.28 → 436 Hz, inside the measured
+  400–500 Hz second peak.
+- Rod models with the same ends: stretching 2648, 5868 Hz; twisting 849,
+  2919 Hz (ends' polar inertia 1.81 × the shaft's).
+- Sealed marrow cavity: air-column model extended to closed–closed
+  (`ends = 0`); 26 cm × 6.5 mm → 653.6 Hz (−17 cents from c/2L by the
+  boundary layer), T60 0.11 s.
+- Read back from the plugin: all 16 mode frequencies matched the
+  finite-element values to 0.1 Hz.
+- η = 0.02 (between Wind-Instrument-Creator's dry value and the wet DMA
+  range): T60 0.29 s at 340 Hz; broadband measured T60 0.28 s.
+- CPU 6.4–6.7 %. Loudness −25.0 LUFS untrimmed → trim +1.0, then −24.5
+  with the rattle active → +1.5 dB total.
+- Rattle sensitivity swept: `rat_ref` 1 → −9.5 / +1.2 / +6.9 dB at Drive
+  30/60/100 %; 2.5 → +0.4/…; 0.5 → −26.5/−5.3/+2.3; 0.35 → none/−10/−0.5;
+  **0.7 → −15.8 / −1.9 / +4.7 dB**, chosen (the fence is −17/−4/+3).
+- Interface: the tile loop now runs to 20; the "dense field" caption
+  switched from `%.2f` to `%.2g` because bone's 0.002 modes/Hz printed as
+  "0.00". `tools/gui_check.py` gained a test clicking the Bone tile (and the
+  "empty space" test moved, since its old spot is now the Bone tile):
+  10 tests, 0 failures.
+

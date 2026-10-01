@@ -31,6 +31,7 @@ compiling, no installer.
 | 17 | Cling film | Soft, rubbery, kazoo-like buzz | Film so light the air it drags outweighs it 14×; loud input makes it slap and buzz |
 | 18 | Corrugated tin roof | Rumbling, rattly, tinny | Ribbed 0.5 mm steel ~1800× stiffer along the ribs than across, with loose fixings that rattle |
 | 19 | Metal barrel | Boomy "inside an oil drum" resonance with steel ring | The air cavity of a 205 litre drum, its two lids, and the steel shell |
+| 20 | Bone | Dry, woody knock with a hollow, hooty core | A dried human shin bone: its hollow shaft bending and twisting (tuned against resonances measured on real tibiae), the air sealed in its marrow cavity, and at high Drive the clack of "rhythm bones" |
 
 ## Installing in REAPER
 
@@ -43,6 +44,25 @@ compiling, no installer.
 
 Tip: like any reverb, it works best on its own track fed by sends, with
 **Mix** at 100%.
+
+## The interface
+
+![The Reverberator interface](docs/gui.png)
+
+- **Pick a material** by clicking its tile.
+- **Knobs**: drag up or down. Hold **Shift** while dragging for fine
+  adjustment, **double-click** to return a knob to its default, or use the
+  mouse wheel over it.
+- **What's ringing** shows the material's resonances on a frequency scale
+  (low on the left, high on the right). Each orange line is one resonance:
+  the taller it is, the longer it rings, and it glows while it is sounding.
+  Teal lines are strings and air columns with their overtones; teal bands are
+  the ice's dispersive paths; the purple band is the dense wash of
+  resonances too many to draw. The green meters show the reverb's level.
+
+All controls can still be automated: in REAPER, click **Param** in the FX
+window, or add envelopes as usual. If you embed the plugin in the track or
+mixer panel, it shows a compact view: the material name and level meters.
 
 ## Controls
 
@@ -63,7 +83,7 @@ Tip: like any reverb, it works best on its own track fed by sends, with
 Changing **Material**, **Size** or **Tuning** rebuilds the object, so the tail
 restarts; the other controls change smoothly.
 
-All 19 materials are level-matched (to within 0.1 dB on a test mix), so
+All 20 materials are level-matched (to within 0.1 dB on a test mix), so
 switching between them doesn't jump in volume.
 
 ## How it works, briefly
