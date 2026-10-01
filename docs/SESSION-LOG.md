@@ -25,6 +25,7 @@ otherwise. Decisions are cross-referenced to `docs/adr/`.
 16. [First run in REAPER, and the interface](#16-first-run-in-reaper-and-the-interface)
 17. [Checking against the official JSFX reference](#17-checking-against-the-official-jsfx-reference)
 18. [A twentieth material: bone](#18-a-twentieth-material-bone)
+19. [State at the end of the session](#19-state-at-the-end-of-the-session)
 
 ---
 
@@ -288,12 +289,15 @@ code gives 1.5 s (fixed during the first session).
 
 ## 15. Open questions for the user
 
+(Kept current; see §19 for the latest state.)
+
 - Do the interpretations in ADR 0014 match what they imagined (tam-tam,
-  stretched hide, pedal-down piano...)?
+  stretched hide, pedal-down piano, intact tibia...)?
 - Listening feedback per material: decay length, brightness, rattle amount.
 - Recordings of any real object tapped, to compare with the model.
 - Whether a CLAP version is wanted, for use outside REAPER.
-- The plugin's custom interface has not yet been seen inside REAPER (§16).
+- The interface fixes (§17) and Bone (§18) have not yet been tried in
+  REAPER; the first interface was loaded once (§16).
 
 ## 16. First run in REAPER, and the interface
 
@@ -431,4 +435,36 @@ network proxy blocks their hosts); their figures are as summarised by search.
   "0.00". `tools/gui_check.py` gained a test clicking the Bone tile (and the
   "empty space" test moved, since its old spot is now the Bone tile):
   10 tests, 0 failures.
+
+## 19. State at the end of the session
+
+All work is on branch `claude/material-reverb-plugin-b8ck1b`; no pull
+request has been opened. Commits, oldest first: the plugin (`1a50a11`),
+documentation (`30b6bc9`), the interface (`10c45ba`), fixes from the
+official reference (`0213ebf`), bone (`274f158`), and this documentation
+refresh.
+
+**Verified (headlessly, with ysfx):**
+- 20 materials, all −24.0 ± 0.1 LUFS on the test program; CPU 2–17 % of
+  one core at 48 kHz (piano highest).
+- Stability sweep: 0 failures (20 materials × 11 extremes at 48 kHz, plus
+  44.1 and 96 kHz).
+- Interface: drawn at 1× and 2× and at several window sizes; 10 simulated-
+  mouse tests pass, each checking engine variables.
+
+**Seen in REAPER by the user:** the first version only (§16, before the
+interface) — it loaded and ran at 3.3 % CPU on the fence.
+
+**Not yet tried in REAPER:** the interface (§16–17) and Bone (§18). The
+likeliest differences are font metrics (REAPER on macOS uses real Arial).
+
+**Open:** listening feedback per material; whether the ADR 0014
+interpretations match what the user imagined; bone's damping (Decay can
+lengthen it); a CLAP port if the plugin is wanted outside REAPER; the
+5 × 4 tile grid is full, so a 21st material needs a layout change.
+
+**Rebuilding the test rig in a new session:** `tools/build_host.sh`
+(needs cmake, g++, freetype and fontconfig development libraries;
+`pip install numpy scipy matplotlib`). The scratch harness used early in
+this session lived outside the repository and is superseded by `tools/`.
 

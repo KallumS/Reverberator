@@ -232,3 +232,6 @@ those controls still make the reverb louder or quieter the way a real one does.
 - **The rattle** is a dead-zone at the output, not a collision model; it
   captures the level threshold and the broadband chatter, not the timing of
   individual impacts.
+- **Bone** is a uniform Euler–Bernoulli tube with point-mass ends, fitted to
+  a tibia's measured resonances; its loss factor (0.02) is a judgement
+  between dry and wet measurements, which disagree by up to five times.

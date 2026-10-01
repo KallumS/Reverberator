@@ -24,6 +24,7 @@ docs/MATERIALS.md      per-material derivations
 docs/PHYSICS.md        formulas, derived and measured values, simplifications
 docs/adr/              architecture decision records 0001-0016 (index in README.md)
 docs/gui.png           interface screenshot used by README (regenerate with tools/build/gui)
+docs/gui-bone.png      interface with Bone selected, used by MATERIALS.md §6.4
 docs/SESSION-LOG.md    session history
 tools/build_host.sh    builds a headless JSFX host (ysfx) into tools/build/
 tools/render.cpp       raw float32 stereo in -> out through the plugin
@@ -41,6 +42,16 @@ demos/                 rendered WAVs, git-ignored (tools/render_demos.py demos)
 
 Python tools need numpy, scipy and matplotlib. The tools default to
 `tools/build/render`; override with `RENDER=/path/to/render`.
+
+## Related repositories
+
+Both are the user's, and both were used as physics references:
+
+- **KallumS/Trombolese** (public): air-column physics (boundary-layer loss,
+  end correction) and the waveguide lessons — ADR 0005, 0006.
+- **KallumS/Wind-Instrument-Creator** (private): a JSFX instrument builder
+  sharing this project's methods; its material table supplied bone's
+  constants (E 18 GPa, ρ 1900, rough-bore factor 1.6).
 
 ## Commands
 
