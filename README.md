@@ -44,6 +44,24 @@ compiling, no installer.
 Tip: like any reverb, it works best on its own track fed by sends, with
 **Mix** at 100%.
 
+## The interface
+
+![The Reverberator interface](docs/gui.png)
+
+- **Pick a material** by clicking its tile.
+- **Knobs**: drag up or down. Hold **Shift** while dragging for fine
+  adjustment, **double-click** to return a knob to its default, or use the
+  mouse wheel over it.
+- **What's ringing** shows the material's resonances on a frequency scale
+  (low on the left, high on the right). Each orange line is one resonance:
+  the taller it is, the longer it rings, and it glows while it is sounding.
+  Teal lines are strings and air columns with their overtones; teal bands are
+  the ice's dispersive paths; the purple band is the dense wash of
+  resonances too many to draw. The green meters show the reverb's level.
+
+All controls can still be automated: in REAPER, click **Param** in the FX
+window, or add envelopes as usual.
+
 ## Controls
 
 | Control | What it does |

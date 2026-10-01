@@ -8,18 +8,18 @@ desc:Reverberator - Material Reverb (physically modelled)
 // loss factor -- and the resonances, decay times and echo density are derived
 // from them. See README.md and docs/PHYSICS.md for the reasoning and numbers.
 
-slider1:0<0,18,1{Chain link fence,Ice sheet,Tension wire,Gong,PVC pipe,Glass,Marble,Car body panel,Leather,Wine bottle,Piano string,Guitar string,Violin string,Steel handpan,Toilet roll tube,Aluminium foil,Cling film,Corrugated tin roof,Metal barrel}>Material
-slider2:35<0,100,0.1>Mix (%)
-slider3:100<25,400,1:log=100>Size (%)
-slider4:100<10,400,1:log=100>Decay (%)
-slider5:0<-100,100,1>Brightness
-slider6:0<-12,12,0.1>Tuning (semitones)
-slider7:0<0,250,1>Pre-delay (ms)
-slider8:30<0,100,1>Drive (%)
-slider9:100<0,150,1>Width (%)
-slider10:20<20,1000,1:log=150>Low cut (Hz)
-slider11:20000<1000,20000,10:log=5000>High cut (Hz)
-slider12:0<-24,12,0.1>Output (dB)
+slider1:0<0,18,1{Chain link fence,Ice sheet,Tension wire,Gong,PVC pipe,Glass,Marble,Car body panel,Leather,Wine bottle,Piano string,Guitar string,Violin string,Steel handpan,Toilet roll tube,Aluminium foil,Cling film,Corrugated tin roof,Metal barrel}>-Material
+slider2:35<0,100,0.1>-Mix (%)
+slider3:100<25,400,1:log=100>-Size (%)
+slider4:100<10,400,1:log=100>-Decay (%)
+slider5:0<-100,100,1>-Brightness
+slider6:0<-12,12,0.1>-Tuning (semitones)
+slider7:0<0,250,1>-Pre-delay (ms)
+slider8:30<0,100,1>-Drive (%)
+slider9:100<0,150,1>-Width (%)
+slider10:20<20,1000,1:log=150>-Low cut (Hz)
+slider11:20000<1000,20000,10:log=5000>-High cut (Hz)
+slider12:0<-24,12,0.1>-Output (dB)
 
 in_pin:Left input
 in_pin:Right input
@@ -31,7 +31,7 @@ out_pin:Right output
 // ---------------------------------------------------------------------------
 // Memory map (units: EEL memory slots)
 // ---------------------------------------------------------------------------
-WG_MAX = 32;   WG_STRIDE = 20;  WG_BASE = 0;       // waveguide descriptors
+WG_MAX = 32;   WG_STRIDE = 24;  WG_BASE = 0;       // waveguide descriptors
 MOD_MAX = 64;  MOD_STRIDE = 12;   MOD_BASE = 1024;    // modal resonators
 FDN_STRIDE = 16;                FDN_BASE = 2048;    // 8 FDN line descriptors
 FDN_TMP = 2200;                             // FDN scratch (8)
@@ -188,6 +188,8 @@ function wg_make() local(p, fa, fb, Ta, Tb, wa, wb, a, t60a, t60b, ga, gb, w1, r
       p[10] = wg_M; p[11] = a; p[12] = wg_K;
       p[14] = wg_gin; p[15] = wg_pl; p[16] = wg_pr;
       p[17] = loop_energy(op_b, op_p);
+      p[18] = wg_pitched ? wg_f1*fsc : 0;    // for the GUI: fundamental (0 = chirp path)
+      p[19] = t60a;
       n_wg += 1;
     );
   );
@@ -280,6 +282,7 @@ function mode_add(f, eta, tmax, amp, wl, wr) local(p, t60, r, th, fs)
     p[4] = amp*wl*sin(th); p[5] = amp*wr*sin(th);
     p[6] = 2*r*th*sin(th);                    // d(coef)/d(relative pitch), for glide
     p[7] = amp*wl; p[8] = amp*wr; p[9] = r;
+    p[10] = fs; p[11] = t60;                  // for the GUI
     n_modes += 1;
   );
 );
@@ -359,6 +362,7 @@ function ring_modes(a, h, E, rho, nu, eta, tmax, nmax, amp) local(n, f, k)
 function fdn_setup(total, t60lo, t60hi, ratio, spread) local(i, fp, tot, sum, fb, wb, Tb, Ta, a, N, Pa, Pb, t60a, t60b, len, M)
 (
   t60a = t60lo*tsc;
+  fdn_disp_t60 = t60a; fdn_disp_dens = total/fsc;    // for the GUI
   // modal overlap: once modes overlap there is no point in a longer network,
   // and the lines must stay short against the decay or it sounds like echoes
   tot = min(total/fsc, 0.3*t60a); tot = max(0.004, min(3.0, tot));
@@ -856,6 +860,105 @@ function update_io()
   lc_on = slider10 > 20.5; hc_on = slider11 < 19999;
 );
 
+// Everything a parameter change needs. Called from @slider, and from @block
+// when the GUI has moved a slider (JSFX does not run @slider for those).
+function apply_params()
+(
+  ((slider1|0) != last_mat || slider3 != last_size || slider6 != last_tune) ? (
+    rebuild(1);
+  ) : (
+    (slider4 != last_decay || slider5 != last_bright) ? rebuild(0);
+  );
+  last_mat = slider1|0; last_size = slider3; last_tune = slider6;
+  last_decay = slider4; last_bright = slider5;
+  update_io();
+  mix_s < 0 ? ( wet_s = wet_t; dry_s = dry_t; outg_s = outg_t; wid_s = wid_t; mix_s = 0; );
+);
+
+// ---------------------------------------------------------------------------
+// GUI tables. @gfx runs in its own thread but shares every variable with the
+// audio code, so everything it touches is prefixed ui_ and it calls only
+// ui_ functions (function locals are static storage in EEL2, not a stack).
+// ---------------------------------------------------------------------------
+UI_KNOBS = 3400;   // 11 knobs x 6: slider, min, max, log?, default, step
+function ui_knob(i, sl, lo, hi, lg, def, st)
+( UI_KNOBS[i*6] = sl; UI_KNOBS[i*6+1] = lo; UI_KNOBS[i*6+2] = hi;
+  UI_KNOBS[i*6+3] = lg; UI_KNOBS[i*6+4] = def; UI_KNOBS[i*6+5] = st; );
+ui_knob(0,  2,     0,   100, 0,    35, 0.1);   // Mix
+ui_knob(1,  3,    25,   400, 1,   100, 1);     // Size
+ui_knob(2,  4,    10,   400, 1,   100, 1);     // Decay
+ui_knob(3,  5,  -100,   100, 0,     0, 1);     // Brightness
+ui_knob(4,  6,   -12,    12, 0,     0, 0.1);   // Tuning
+ui_knob(5,  7,     0,   250, 0,     0, 1);     // Pre-delay
+ui_knob(6,  8,     0,   100, 0,    30, 1);     // Drive
+ui_knob(7,  9,     0,   150, 0,   100, 1);     // Width
+ui_knob(8,  10,   20,  1000, 1,    20, 1);     // Low cut
+ui_knob(9,  11, 1000, 20000, 1, 20000, 10);    // High cut
+ui_knob(10, 12,  -24,    12, 0,     0, 0.1);   // Output
+
+// string slots: 100+ material names, 150+ what each sounds like, 300+ knob labels
+strcpy(100, "Chain link fence");    strcpy(150, "Metallic twang, laser 'pew' and jangling links");
+strcpy(101, "Ice sheet");           strcpy(151, "Falling 'pew pew' echoes off a frozen lake");
+strcpy(102, "Tension wire");        strcpy(152, "Long droning sci-fi blaster chirps");
+strcpy(103, "Gong");                strcpy(153, "A huge, dark, shimmering tam-tam wash");
+strcpy(104, "PVC pipe");            strcpy(154, "Hollow, tubey flutter down 1.5 m of pipe");
+strcpy(105, "Glass");               strcpy(155, "Bright, glassy ring of a window pane");
+strcpy(106, "Marble");              strcpy(156, "A short, stony, pitched clink");
+strcpy(107, "Car body panel");      strcpy(157, "The clanky metallic bonk of a door skin");
+strcpy(108, "Leather");             strcpy(158, "A dead, thumpy drum-skin thud");
+strcpy(109, "Wine bottle");         strcpy(159, "A hooty 110 Hz boom with a glass clink");
+strcpy(110, "Piano string");        strcpy(160, "The halo of 24 piano strings, pedal down");
+strcpy(111, "Guitar string");       strcpy(161, "Six open strings humming through the body");
+strcpy(112, "Violin string");       strcpy(162, "Nasal, woody violin-body resonance");
+strcpy(113, "Steel handpan");       strcpy(163, "A sweet, bell-like bloom in D minor");
+strcpy(114, "Toilet roll tube");    strcpy(164, "Honky and boxy, like talking through a tube");
+strcpy(115, "Aluminium foil");      strcpy(165, "A sizzly, crinkly, papery splash");
+strcpy(116, "Cling film");          strcpy(166, "A soft, rubbery, kazoo-like buzz");
+strcpy(117, "Corrugated tin roof"); strcpy(167, "Rumbling, rattly and tinny");
+strcpy(118, "Metal barrel");        strcpy(168, "The boom of an oil drum, with a steel ring");
+strcpy(300, "MIX");     strcpy(301, "SIZE");      strcpy(302, "DECAY");    strcpy(303, "BRIGHT");
+strcpy(304, "TUNE");    strcpy(305, "PRE-DELAY"); strcpy(306, "DRIVE");    strcpy(307, "WIDTH");
+strcpy(308, "LOW CUT"); strcpy(309, "HIGH CUT");  strcpy(310, "OUTPUT");
+
+function ui_norm(k, v) local(lo, hi)
+(
+  lo = UI_KNOBS[k*6+1]; hi = UI_KNOBS[k*6+2];
+  max(0, min(1, UI_KNOBS[k*6+3] ? log(v/lo)/log(hi/lo) : (v - lo)/(hi - lo)));
+);
+function ui_denorm(k, n) local(lo, hi, st, v)
+(
+  lo = UI_KNOBS[k*6+1]; hi = UI_KNOBS[k*6+2]; st = UI_KNOBS[k*6+5];
+  n = max(0, min(1, n));
+  v = UI_KNOBS[k*6+3] ? lo*(hi/lo)^n : lo + n*(hi - lo);
+  max(lo, min(hi, floor(v/st + 0.5)*st));
+);
+// Move a slider from the GUI: tell REAPER (automation, undo) and ask @block
+// to apply it, since @slider does not run for GUI changes.
+function ui_setslider(sl, v)
+(
+  slider(sl) != v ? ( slider(sl) = v; slider_automate(2^(sl - 1)); ui_changed = 1; );
+);
+function ui_value_str(k, v)
+(
+  k == 3 ? sprintf(#ui_val, "%+d", floor(v + 0.5)) :
+  k == 4 ? sprintf(#ui_val, "%+.1f st", v) :
+  k == 5 ? sprintf(#ui_val, "%d ms", floor(v + 0.5)) :
+  k == 8 ? (v <= 20.5 ? strcpy(#ui_val, "off") : sprintf(#ui_val, "%d Hz", floor(v + 0.5))) :
+  k == 9 ? (v >= 19999 ? strcpy(#ui_val, "off") : sprintf(#ui_val, "%.1f kHz", v/1000)) :
+  k == 10 ? sprintf(#ui_val, "%+.1f dB", v) :
+  sprintf(#ui_val, "%d%%", floor(v + 0.5));
+);
+function ui_rgb(r, g, b, a) ( gfx_r = r; gfx_g = g; gfx_b = b; gfx_a = a; );
+// frequency (Hz) -> x on the resonance plot; decay (s) -> 0..1 height
+function ui_fx(f) ( ui_px + ui_pw*max(0, min(1, log(f/20)/log(1000))); );
+function ui_th(t) ( max(0.04, min(1, log(max(t, 0.02)/0.02)/log(1500))); );
+function ui_text(str, x, y, w, h, flags)
+( gfx_x = x; gfx_y = y; gfx_drawstr(str, flags, x + w, y + h); );
+function ui_arc(x, y, r, a0, a1, th) local(rr)
+( rr = r - th/2; loop(max(1, ceil(th)), gfx_arc(x, y, rr, a0, a1, 1); rr += 1;); );
+gfx_ext_retina = 1;
+ui_drag = -1; ui_click_k = -1;
+
 // pre-delay buffers sit at the bottom of the pool
 pd_len = floor(0.26*srate) + 4;
 pdL = POOL0; pdR = pdL + pd_len;
@@ -869,19 +972,13 @@ mix_s = -1;
 
 @slider
 
-((slider1|0) != last_mat || slider3 != last_size || slider6 != last_tune) ? (
-  rebuild(1);
-) : (
-  (slider4 != last_decay || slider5 != last_bright) ? rebuild(0);
-);
-last_mat = slider1|0; last_size = slider3; last_tune = slider6;
-last_decay = slider4; last_bright = slider5;
-update_io();
-mix_s < 0 ? ( wet_s = wet_t; dry_s = dry_t; outg_s = outg_t; wid_s = wid_t; mix_s = 0; );
+apply_params();
 
 @block
 
 sm = 1 - exp(-1/(0.02*srate));
+ui_changed ? ( ui_changed = 0; apply_params(); );
+mtr_dec = exp(-1/(0.3*srate));
 
 @sample
 
@@ -938,6 +1035,7 @@ n_wg > 0 ? (
       loop(M, xo = s[0]; yo = s[K]; z = a*(y - yo) + xo; s[0] = y; s[K] = z; y = z; s += K2;);
     );
     wgL += y*p[15]; wgR += y*p[16];
+    wpk = abs(y); p[20] = wpk > p[20] ? wpk : p[20]*0.9995;   // GUI glow
     buf[w] = y + xw*p[14];
     w += 1; w >= len ? w = 0; p[2] = w;
     p += WG_STRIDE;
@@ -1054,3 +1152,212 @@ aw = abs(wR); aw > 0.9 ? ( e = aw - 0.9; wR = sign(wR)*(0.9 + 0.1*e/(0.1 + e)); 
 
 spl0 = (inL*dry_s + wL*wet_s)*outg_s;
 spl1 = (inR*dry_s + wR*wet_s)*outg_s;
+
+// GUI meters (wet signal, and the dense field's activity)
+aw = abs(wL); mtr_l = aw > mtr_l ? aw : mtr_l*mtr_dec;
+aw = abs(wR); mtr_r = aw > mtr_r ? aw : mtr_r*mtr_dec;
+aw = abs(fdn_mono); fdn_glow = aw > fdn_glow ? aw : fdn_glow*mtr_dec;
+
+@gfx 760 480
+
+// ---------------------------------------------------------------------------
+// Layout in logical units on a 760 x 480 canvas, scaled to the window (and
+// to Retina via gfx_ext_retina).
+// ---------------------------------------------------------------------------
+ui_s = max(0.5, min(gfx_w/760, gfx_h/480));
+ui_ox = max(0, (gfx_w - 760*ui_s)/2);
+ui_s != ui_fs ? (
+  ui_fs = ui_s;
+  gfx_setfont(1, "Arial", 13*ui_s);
+  gfx_setfont(2, "Arial", 22*ui_s, 'b');
+  gfx_setfont(3, "Arial", 11*ui_s);
+  gfx_setfont(4, "Arial", 20*ui_s, 'b');
+  gfx_setfont(5, "Arial", 12*ui_s, 'b');
+  gfx_setfont(6, "Arial", 10.5*ui_s, 'b');
+);
+ui_mat = slider1|0;
+ui_mx = mouse_x; ui_my = mouse_y;
+ui_down = mouse_cap & 1;
+ui_pressed = ui_down && !ui_last_down;
+ui_released = !ui_down && ui_last_down;
+ui_last_down = ui_down;
+
+ui_rgb(0.075, 0.082, 0.098, 1); gfx_rect(0, 0, gfx_w, gfx_h);
+
+// ---- header
+ui_x0 = ui_ox + 20*ui_s;
+gfx_setfont(2); ui_rgb(0.93, 0.93, 0.94, 1);
+ui_text("REVERBERATOR", ui_x0, 12*ui_s, 400*ui_s, 26*ui_s, 0);
+gfx_setfont(3); ui_rgb(0.55, 0.58, 0.63, 1);
+ui_text("physically modelled material reverb", ui_x0, 40*ui_s, 400*ui_s, 14*ui_s, 0);
+gfx_setfont(4); ui_rgb(0.96, 0.66, 0.29, 1);
+ui_text(100 + ui_mat, ui_ox + 300*ui_s, 12*ui_s, 440*ui_s, 26*ui_s, 2);
+gfx_setfont(3); ui_rgb(0.75, 0.77, 0.8, 1);
+ui_text(150 + ui_mat, ui_ox + 300*ui_s, 40*ui_s, 440*ui_s, 14*ui_s, 2);
+
+// ---- material tiles, 5 x 4
+gfx_setfont(1);
+ui_tw = (720 - 4*6)/5;
+ui_i = 0;
+loop(19,
+  ui_tx = ui_ox + (20 + (ui_i % 5)*(ui_tw + 6))*ui_s;
+  ui_ty = (64 + floor(ui_i/5)*36)*ui_s;
+  ui_hot = ui_mx >= ui_tx && ui_mx < ui_tx + ui_tw*ui_s && ui_my >= ui_ty && ui_my < ui_ty + 30*ui_s;
+  ui_hot && ui_pressed && ui_drag < 0 ? ( ui_setslider(1, ui_i); ui_mat = ui_i; );
+  ui_i == ui_mat ? ui_rgb(0.96, 0.66, 0.29, 1) : ui_hot ? ui_rgb(0.19, 0.21, 0.25, 1) : ui_rgb(0.125, 0.137, 0.165, 1);
+  gfx_rect(ui_tx, ui_ty, ui_tw*ui_s, 30*ui_s, 1);
+  ui_i == ui_mat ? ui_rgb(0.08, 0.08, 0.09, 1) : ui_rgb(0.85, 0.86, 0.88, 1);
+  ui_text(100 + ui_i, ui_tx, ui_ty, ui_tw*ui_s, 30*ui_s, 1|4);
+  ui_i += 1;
+);
+
+// ---- what's ringing: every resonance of the current material
+ui_rx = ui_ox + 20*ui_s; ui_ry = 214*ui_s; ui_rw = 720*ui_s; ui_rh = 132*ui_s;
+ui_rgb(0.1, 0.11, 0.13, 1); gfx_rect(ui_rx, ui_ry, ui_rw, ui_rh, 1);
+ui_px = ui_rx + 12*ui_s; ui_pw = 652*ui_s; ui_py = ui_ry + 24*ui_s; ui_ph = 84*ui_s;
+ui_base = ui_py + ui_ph;
+// frequency grid
+gfx_setfont(3);
+ui_i = 0;
+loop(8,
+  ui_f = ui_i==0?50:ui_i==1?100:ui_i==2?200:ui_i==3?500:ui_i==4?1000:ui_i==5?2000:ui_i==6?5000:10000;
+  ui_x = ui_fx(ui_f);
+  ui_rgb(1, 1, 1, 0.06); gfx_line(ui_x, ui_py, ui_x, ui_base);
+  ui_rgb(0.45, 0.48, 0.53, 1);
+  sprintf(#ui_lbl, ui_f >= 1000 ? "%dk" : "%d", ui_f >= 1000 ? ui_f/1000 : ui_f);
+  ui_text(#ui_lbl, ui_x - 20*ui_s, ui_base + 3*ui_s, 40*ui_s, 12*ui_s, 1);
+  ui_i += 1;
+);
+ui_rgb(1, 1, 1, 0.12); gfx_line(ui_px, ui_base, ui_px + ui_pw, ui_base);
+// dense field: a band whose height is its decay and brightness its activity
+fdn_on ? (
+  ui_h = ui_th(fdn_disp_t60)*ui_ph;
+  ui_g = min(1, sqrt(fdn_glow)*2);
+  ui_x = ui_fx(max(40, fdn_hp)); ui_w = ui_fx(16000) - ui_x;
+  ui_rgb(0.55, 0.5, 0.95, 0.05 + 0.2*ui_g);
+  gfx_rect(ui_x, ui_base - ui_h, ui_w, ui_h, 1);
+  ui_rgb(0.55, 0.5, 0.95, 0.35 + 0.5*ui_g);
+  gfx_line(ui_x, ui_base - ui_h, ui_x + ui_w, ui_base - ui_h);
+);
+// strings, wires and air columns: their partials; chirp paths: a band
+ui_i = 0; ui_p = WG_BASE; ui_nstr = 0;
+loop(n_wg,
+  ui_f = ui_p[18];
+  ui_g = min(1, sqrt(ui_p[20]*wg_norm)*2.5);
+  ui_h = ui_th(ui_p[19])*ui_ph;
+  ui_f > 0 ? (
+    ui_nstr += 1;
+    ui_n = 1;
+    loop(min(40, floor(16000/ui_f)),
+      ui_rgb(0.35, 0.85, 0.85, (0.12 + 0.8*ui_g)/sqrt(ui_n));
+      ui_x = ui_fx(ui_f*ui_n);
+      gfx_line(ui_x, ui_base, ui_x, ui_base - ui_h/sqrt(ui_n));
+      ui_n += 1;
+    );
+  ) : (
+    ui_rgb(0.35, 0.85, 0.85, 0.06 + 0.3*ui_g);
+    gfx_rect(ui_fx(250), ui_base - ui_h, ui_fx(6000) - ui_fx(250), ui_h, 1);
+  );
+  ui_p += WG_STRIDE; ui_i += 1;
+);
+// individual resonances: height = how long it rings, glow = how hard it is ringing now
+ui_p = MOD_BASE;
+loop(n_modes,
+  ui_f = ui_p[10];
+  ui_c = cos(2*$pi*ui_f/srate);
+  ui_a = sqrt(max(0, ui_p[2]*ui_p[2] + ui_p[3]*ui_p[3] - 2*ui_c*ui_p[2]*ui_p[3])/max(0.000001, 1 - ui_c*ui_c));
+  ui_a *= sqrt(ui_p[4]*ui_p[4] + ui_p[5]*ui_p[5])*mod_norm;
+  ui_g = min(1, sqrt(ui_a)*3);
+  ui_h = ui_th(ui_p[11])*ui_ph;
+  ui_x = ui_fx(ui_f);
+  ui_rgb(0.96, 0.66, 0.29, 0.3 + 0.7*ui_g);
+  gfx_line(ui_x, ui_base, ui_x, ui_base - ui_h);
+  gfx_rect(ui_x - 1*ui_s, ui_base - ui_h - 1*ui_s, 2*ui_s + 1, 2*ui_s + 1, 1);
+  ui_p += MOD_STRIDE;
+);
+// caption
+gfx_setfont(5); ui_rgb(0.55, 0.58, 0.63, 1);
+ui_text("WHAT'S RINGING", ui_px, ui_ry + 6*ui_s, 200*ui_s, 14*ui_s, 0);
+gfx_setfont(3); ui_rgb(0.62, 0.65, 0.7, 1);
+#ui_cap = "";
+n_modes > 0 ? ( sprintf(#ui_lbl, "%d resonances", n_modes); strcat(#ui_cap, #ui_lbl); );
+ui_nstr > 0 ? ( sprintf(#ui_lbl, "%s%d %s", strlen(#ui_cap) ? "  ·  " : "", ui_nstr, ui_nstr == 1 ? "string/air column" : "strings/air columns"); strcat(#ui_cap, #ui_lbl); );
+ui_nstr < n_wg ? ( sprintf(#ui_lbl, "%s%d dispersive paths", strlen(#ui_cap) ? "  ·  " : "", n_wg - ui_nstr); strcat(#ui_cap, #ui_lbl); );
+fdn_on ? ( sprintf(#ui_lbl, "%sdense field %.2f modes/Hz", strlen(#ui_cap) ? "  ·  " : "", fdn_disp_dens); strcat(#ui_cap, #ui_lbl); );
+ui_text(#ui_cap, ui_px + 120*ui_s, ui_ry + 7*ui_s, 540*ui_s, 14*ui_s, 2);
+// wet output meters
+ui_i = 0;
+loop(2,
+  ui_x = ui_rx + (684 + ui_i*14)*ui_s;
+  ui_v = ui_i == 0 ? mtr_l : mtr_r;
+  ui_v = max(0, min(1, (20*log10(max(ui_v, 0.000001)) + 60)/60));
+  ui_rgb(1, 1, 1, 0.07); gfx_rect(ui_x, ui_py, 10*ui_s, ui_ph, 1);
+  ui_rgb(0.35, 0.85, 0.55, 0.9); gfx_rect(ui_x, ui_base - ui_v*ui_ph, 10*ui_s, ui_v*ui_ph, 1);
+  ui_i += 1;
+);
+ui_rgb(0.45, 0.48, 0.53, 1);
+ui_text("WET", ui_rx + 680*ui_s, ui_base + 3*ui_s, 32*ui_s, 12*ui_s, 1);
+
+// ---- knobs
+ui_cw = 720/11;
+ui_ky = 392*ui_s; ui_kr = 19*ui_s;
+ui_hotk = -1;
+ui_i = 0;
+loop(11,
+  ui_kx = ui_ox + (20 + ui_cw*(ui_i + 0.5))*ui_s;
+  abs(ui_mx - ui_kx) < ui_cw*ui_s/2 && ui_my > ui_ky - 30*ui_s && ui_my < ui_ky + 50*ui_s ? ui_hotk = ui_i;
+  ui_i += 1;
+);
+// mouse: press to grab, drag up/down, shift for fine, double-click for default
+ui_pressed && ui_hotk >= 0 ? (
+  ui_t = time_precise();
+  ui_t - ui_click_t < 0.35 && ui_click_k == ui_hotk ? (
+    ui_setslider(UI_KNOBS[ui_hotk*6], UI_KNOBS[ui_hotk*6+4]);
+    ui_click_k = -1;
+  ) : (
+    ui_drag = ui_hotk; ui_y0 = ui_my;
+    ui_n0 = ui_norm(ui_drag, slider(UI_KNOBS[ui_drag*6]));
+    ui_click_t = ui_t; ui_click_k = ui_hotk;
+  );
+);
+ui_down && ui_drag >= 0 ? (
+  ui_fine = mouse_cap & 8 ? 0.1 : 1;
+  ui_setslider(UI_KNOBS[ui_drag*6], ui_denorm(ui_drag, ui_n0 + (ui_y0 - ui_my)/(200*ui_s)*ui_fine));
+);
+ui_released ? ui_drag = -1;
+mouse_wheel != 0 ? (
+  ui_hotk >= 0 ? (
+    ui_setslider(UI_KNOBS[ui_hotk*6],
+      ui_denorm(ui_hotk, ui_norm(ui_hotk, slider(UI_KNOBS[ui_hotk*6])) + (mouse_wheel/120)*0.02));
+  );
+  mouse_wheel = 0;
+);
+ui_i = 0;
+loop(11,
+  ui_kx = ui_ox + (20 + ui_cw*(ui_i + 0.5))*ui_s;
+  ui_v = slider(UI_KNOBS[ui_i*6]);
+  ui_n = ui_norm(ui_i, ui_v);
+  // bipolar knobs draw their arc from the default, the rest from the minimum
+  ui_n0d = (ui_i == 3 || ui_i == 4 || ui_i == 10) ? ui_norm(ui_i, UI_KNOBS[ui_i*6+4]) : 0;
+  ui_a0 = -0.75*$pi + 1.5*$pi*min(ui_n, ui_n0d);
+  ui_a1 = -0.75*$pi + 1.5*$pi*max(ui_n, ui_n0d);
+  ui_rgb(1, 1, 1, 0.1);
+  ui_arc(ui_kx, ui_ky, ui_kr, -0.75*$pi, 0.75*$pi, 3*ui_s);
+  ui_rgb(0.96, 0.66, 0.29, ui_i == ui_hotk || ui_i == ui_drag ? 1 : 0.85);
+  ui_a1 > ui_a0 + 0.001 ? ui_arc(ui_kx, ui_ky, ui_kr, ui_a0, ui_a1, 3*ui_s);
+  ui_a = -0.75*$pi + 1.5*$pi*ui_n;
+  ui_i == ui_hotk || ui_i == ui_drag ? ui_rgb(0.17, 0.19, 0.22, 1) : ui_rgb(0.13, 0.145, 0.17, 1);
+  gfx_circle(ui_kx, ui_ky, ui_kr - 5*ui_s, 1, 1);
+  ui_rgb(0.93, 0.93, 0.94, 1);
+  gfx_line(ui_kx + sin(ui_a)*(ui_kr - 14*ui_s), ui_ky - cos(ui_a)*(ui_kr - 14*ui_s),
+           ui_kx + sin(ui_a)*(ui_kr - 6*ui_s),  ui_ky - cos(ui_a)*(ui_kr - 6*ui_s), 1);
+  gfx_setfont(6); ui_rgb(0.55, 0.58, 0.63, 1);
+  ui_text(300 + ui_i, ui_kx - ui_cw*ui_s/2, ui_ky + 25*ui_s, ui_cw*ui_s, 14*ui_s, 1);
+  gfx_setfont(1); ui_rgb(0.93, 0.93, 0.94, 1);
+  ui_value_str(ui_i, ui_v);
+  ui_text(#ui_val, ui_kx - ui_cw*ui_s/2, ui_ky + 40*ui_s, ui_cw*ui_s, 15*ui_s, 1);
+  ui_i += 1;
+);
+gfx_setfont(3); ui_rgb(0.4, 0.43, 0.48, 1);
+ui_text("drag knobs up/down  ·  shift-drag for fine  ·  double-click to reset  ·  mouse wheel",
+        ui_ox, 460*ui_s, 760*ui_s, 14*ui_s, 1);

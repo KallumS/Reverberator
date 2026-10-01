@@ -21,6 +21,7 @@ the decisions were made; superseded records stay, marked as such.
 | [0013](0013-stability-criterion.md) | Stability means "energy does not grow after the input stops" |
 | [0014](0014-material-interpretations.md) | Which version of each object is modelled |
 | [0015](0015-demos-not-committed.md) | Audio demos are generated, not committed |
+| [0016](0016-custom-gui.md) | A custom @gfx interface, with the default sliders hidden |
 
 ## Adding a record
 

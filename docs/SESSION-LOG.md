@@ -22,6 +22,7 @@ otherwise. Decisions are cross-referenced to `docs/adr/`.
 13. [Documentation pass](#13-documentation-pass)
 14. [Dead ends and corrections](#14-dead-ends-and-corrections)
 15. [Open questions for the user](#15-open-questions-for-the-user)
+16. [First run in REAPER, and the interface](#16-first-run-in-reaper-and-the-interface)
 
 ---
 
@@ -290,4 +291,54 @@ code gives 1.5 s (fixed during the first session).
 - Listening feedback per material: decay length, brightness, rattle amount.
 - Recordings of any real object tapped, to compare with the model.
 - Whether a CLAP version is wanted, for use outside REAPER.
-- The plugin has not yet been run inside REAPER itself.
+- The plugin's custom interface has not yet been seen inside REAPER (§16).
+
+## 16. First run in REAPER, and the interface
+
+The user loaded the plugin in REAPER (macOS). It loaded and ran — REAPER's
+performance readout showed **3.3 %** for the chain link fence — but showed
+REAPER's default JSFX view, a list of sliders, which the user read as "no
+GUI". That was accurate: no `@gfx` section had been written.
+
+**Verification first.** ysfx was rebuilt with graphics (`-DYSFX_GFX=ON`,
+linking freetype and fontconfig) and a third host, `tools/gui.cpp`, written:
+it runs `@gfx` into a framebuffer at any size and Retina scale, replays
+mouse events, steps audio in between, and prints sliders and chosen engine
+variables. `tools/gui_png.py` turns the framebuffer into a PNG.
+
+**Design** (ADR 0016): material tiles, the material's one-line description,
+a "what's ringing" plot of every resonance (height = T60, glow = current
+amplitude, recovered from each resonator's two state values as
+√((y₁² + y₂² − 2y₁y₂ cos θ)/sin²θ)), wet meters, and eleven knobs. The
+default sliders are hidden with a `-` prefix.
+
+**Thread safety.** `@gfx` shares all variables with the audio code and EEL2
+locals are static, so every GUI name is `ui_`-prefixed and the GUI calls only
+`ui_` functions — the same lesson as §6, applied before it could bite.
+Because `@slider` does not run for GUI changes, its body became
+`apply_params()`, called from `@slider` and from `@block` when `ui_changed`
+is set.
+
+Engine changes to feed the display: modes store frequency and T60
+(`p[10]`, `p[11]`); waveguides store fundamental and T60 (`p[18]`, `p[19]`)
+and a peak-hold of their output (`p[20]`), so `WG_STRIDE` grew from 20 to 24;
+the FDN publishes its density and T60; `@sample` keeps wet and dense-field
+peak meters.
+
+**Measured.**
+- First render was usable as drawn; polish: the dense-field band was made
+  translucent with an edge line, and knob labels moved to a smaller bold
+  font after "PRE-DELAY" nearly touched its neighbours.
+- Interactions, each checked against engine variables: clicking the Glass
+  tile → `mat` = 5, 32 modes built; dragging Mix up 100 px → 85 %,
+  `wet_t` = 1, `dry_t` = 0.3; shift-drag 100 px → +5 %; double-click on
+  Decay at 200 % → 100 %, `tsc` = 1; Low cut dragged to the top → 1000 Hz,
+  filter on; the same tile click at Retina scale 2 → correct material.
+- The wheel first appeared to jump to the maximum: ysfx scales a wheel step
+  to 512 units where REAPER uses 120. One ysfx step = 4.3 REAPER notches;
+  the plugin follows REAPER.
+- Rendered at 600 × 380 and 1100 × 500: scales and centres correctly.
+- Full check and stability sweep re-run after the engine changes: loudness
+  table unchanged (all −24.0 ± 0.1 LUFS), CPU unchanged (2.3–17.1 %),
+  **0 failures**.
+

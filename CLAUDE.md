@@ -22,11 +22,14 @@ Where things are documented:
 Reverberator.jsfx      the plugin: physics helpers, 19 material setups, 3 engines
 docs/MATERIALS.md      per-material derivations
 docs/PHYSICS.md        formulas, derived and measured values, simplifications
-docs/adr/              architecture decision records 0001-0015 (index in README.md)
+docs/adr/              architecture decision records 0001-0016 (index in README.md)
+docs/gui.png           interface screenshot used by README (regenerate with tools/build/gui)
 docs/SESSION-LOG.md    session history
 tools/build_host.sh    builds a headless JSFX host (ysfx) into tools/build/
 tools/render.cpp       raw float32 stereo in -> out through the plugin
 tools/inspect.cpp      dump plugin variables/memory after N blocks
+tools/gui.cpp          run @gfx headlessly: draw to an image, simulate mouse, print sliders/vars
+tools/gui_png.py       convert gui's raw BGRA output to PNG
 tools/check.py         loudness table, trim suggestions, stability sweep
 tools/render_demos.py  WAV demos of every material
 tools/spectrograms.py  impulse-response spectrogram grid
@@ -79,6 +82,25 @@ Run the sweep in the background. It must report `0 failure(s)`. "note" lines
 - **No scientific notation.** `1.5e-5` is a syntax error. Write decimals.
 - **Functions are inlined, variables not declared `local` are global.**
 - Compiling is not evidence. Render it (`tools/build/render`) and look.
+
+## GUI (@gfx) rules — ADR 0016
+
+- **@gfx runs on the UI thread and shares every variable with the audio
+  code.** Every variable and function it uses is prefixed `ui_`; it calls only
+  `ui_` functions (EEL2 `local()`s are static, so a shared function called
+  from both threads corrupts itself). Read engine memory, never write it.
+- **Moving a slider from @gfx does not run @slider.** Use `ui_setslider()`,
+  which calls `slider_automate` and sets `ui_changed`; `@block` then runs
+  `apply_params()`.
+- Sliders are hidden with a `-` prefix on their names; keep it on any new
+  slider, and add a knob or control for it in the GUI.
+- `mouse_wheel` is 120 per notch in REAPER; ysfx (and so `tools/build/gui`)
+  uses 512.
+- Check GUI changes by rendering:
+  `tools/build/gui Reverberator.jsfx out.bgra 760 480 2 1=<material>` then
+  `python3 tools/gui_png.py out.bgra 1520 960 out.png`, and look at it.
+  Simulate clicks with `EVENTS="x,y,buttons;..."` and check engine variables
+  with `VARS=`.
 
 ## Design rules
 
