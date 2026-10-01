@@ -117,14 +117,17 @@ Further reading:
 - [`docs/SESSION-LOG.md`](docs/SESSION-LOG.md) — how the plugin was built,
   including what went wrong.
 
-## Relation to Trombolese
+## Relation to Trombolese and Wind-Instrument-Creator
 
-The air-column model (PVC pipe, toilet roll tube) reuses Trombolese's physics
-directly: its Kirchhoff boundary-layer loss, which both damps the air and
-slows it slightly, and its 0.6133 × radius end correction. Two of
-Trombolese's lessons shaped the design: dispersion has to be **distributed
-through the loop, not lumped** at one end, and the pitch has to be tuned
-against the loop's **exact phase**, not an idealised length.
+The air-column model (PVC pipe, toilet roll tube, the bone's marrow cavity)
+reuses Trombolese's physics directly: its Kirchhoff boundary-layer loss,
+which both damps the air and slows it slightly, and its 0.6133 × radius end
+correction. Two of Trombolese's lessons shaped the design: dispersion has to
+be **distributed through the loop, not lumped** at one end, and the pitch has
+to be tuned against the loop's **exact phase**, not an idealised length.
+
+Bone's material constants (stiffness, density, and its rough bore) come from
+Wind-Instrument-Creator's material table.
 
 ## For developers
 
@@ -133,15 +136,19 @@ against the loop's **exact phase**, not an idealised length.
 engine as REAPER:
 
 ```bash
-tools/build_host.sh                    # builds tools/build/render and inspect (~30 s)
+tools/build_host.sh                    # builds tools/build/render, inspect and gui (~1 min)
 python3 tools/check.py                 # loudness table + stability sweep (~10 min)
 python3 tools/check.py --trims         # suggest loudness trims after a physics change
+python3 tools/gui_check.py             # simulated-mouse tests of the interface (~10 s)
 python3 tools/render_demos.py demos    # WAV demos of every material
 python3 tools/spectrograms.py out.png  # impulse-response spectrogram grid
+tools/build/gui Reverberator.jsfx out.bgra 760 480 2 1=<material>
+python3 tools/gui_png.py out.bgra 1520 960 out.png   # draw the interface to a PNG
 ```
 
-The Python tools need `numpy`, `scipy` and `matplotlib`. See `CLAUDE.md` for
-the traps.
+The Python tools need `numpy`, `scipy` and `matplotlib`; the interface tool
+also needs the freetype and fontconfig libraries. See `CLAUDE.md` for the
+traps, and `docs/SESSION-LOG.md` for how everything was built and measured.
 
 ## Licence
 

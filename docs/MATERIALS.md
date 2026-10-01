@@ -541,6 +541,8 @@ the most "tuned" material; the Tuning control changes its key.
 
 *Added after the first release, to fill the twentieth tile.*
 
+![The interface with Bone selected](gui-bone.png)
+
 **Which bone.** Bone has made music for at least 35 000 years — the Hohle
 Fels vulture-bone flute is 21.8 cm long and about 8 mm across — and
 "rhythm bones", pairs of rib or shin bones 12–18 cm long, are clacked
@@ -674,3 +676,8 @@ the bass, repeating.
 - **The bossed gong, slack leather, a real guitar's bracing**: each a
   deliberate choice of which version of the object to model (ADR 0014).
 - **Full-length chirps**: limited by the dispersion budget (§7.1).
+- **The bone as a perfect tube with point-mass ends**: real bones taper,
+  curve and have triangular sections; the finite-element model uses a
+  uniform tube (Euler–Bernoulli, so no shear or rotary inertia, which would
+  pull its higher modes down somewhat) with two point masses. It is
+  calibrated to the measured first two resonances, not to a scan of a bone.
