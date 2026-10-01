@@ -30,6 +30,7 @@ tools/render.cpp       raw float32 stereo in -> out through the plugin
 tools/inspect.cpp      dump plugin variables/memory after N blocks
 tools/gui.cpp          run @gfx headlessly: draw to an image, simulate mouse, print sliders/vars
 tools/gui_png.py       convert gui's raw BGRA output to PNG
+tools/gui_check.py     simulated-mouse tests of the interface (must report 0 failures)
 tools/check.py         loudness table, trim suggestions, stability sweep
 tools/render_demos.py  WAV demos of every material
 tools/spectrograms.py  impulse-response spectrogram grid
@@ -48,6 +49,7 @@ tools/build_host.sh                       # ~30 s, needs cmake + g++
 python3 tools/check.py --no-sweep         # ~1 min: loudness/peak/CPU/T60 table
 python3 tools/check.py                    # ~10 min: + 19 materials x 11 extremes x 3 sample rates
 python3 tools/check.py --trims --no-sweep # after any physics change
+python3 tools/gui_check.py                # ~10 s: after any change to @gfx
 ```
 
 Run the sweep in the background. It must report `0 failure(s)`. "note" lines
@@ -86,9 +88,10 @@ Run the sweep in the background. It must report `0 failure(s)`. "note" lines
 ## GUI (@gfx) rules — ADR 0016
 
 - **@gfx runs on the UI thread and shares every variable with the audio
-  code.** Every variable and function it uses is prefixed `ui_`; it calls only
-  `ui_` functions (EEL2 `local()`s are static, so a shared function called
-  from both threads corrupts itself). Read engine memory, never write it.
+  code.** Every variable it uses is prefixed `ui_`. Function `local()`s are
+  kept per code section (so they are not the risk), but any *global* a
+  function touches is shared, so the GUI calls only `ui_` functions, which
+  touch only `ui_` globals. Read engine memory, never write it.
 - **Moving a slider from @gfx does not run @slider.** Use `ui_setslider()`,
   which calls `slider_automate` and sets `ui_changed`; `@block` then runs
   `apply_params()`.
@@ -101,6 +104,31 @@ Run the sweep in the background. It must report `0 failure(s)`. "note" lines
   `python3 tools/gui_png.py out.bgra 1520 960 out.png`, and look at it.
   Simulate clicks with `EVENTS="x,y,buttons;..."` and check engine variables
   with `VARS=`.
+
+## Facts checked against the official JSFX reference
+
+The user supplied REAPER's JSFX Programming Reference and API list (not
+committed: they are REAPER's documents). Points that matter here:
+
+- `@init` runs on load, sample-rate change **and every transport start**, and
+  all variables and memory are zeroed before it (unless `@serialize` exists).
+  So every table must be rebuilt in `@init`, and pressing play restarts the
+  tail — expected. `@slider` always runs after `@init`.
+- `==` and `!=` compare with a 0.00001 tolerance; `&&`/`||` and `|`/`&`/`~`
+  have equal precedence within each group — parenthesise mixtures.
+- Memory index = value + 0.00001, truncated: index with integers.
+- Functions may call only functions declared *before* them; 0–40 parameters;
+  `local()`s persist across calls and are kept per code section.
+- `slider_automate(mask[, end_touch])`: mask bit n−1 for slider n;
+  `end_touch` (6.74+) closes a touch-automation pass — call it when a GUI
+  gesture ends (`ui_endtouch`).
+- `gfx_setfont` sizes must be 8–100; `gfx_drawstr` clips to its box unless
+  flag 256; `mouse_cap` 8 = Shift, 4 = Ctrl/Cmd, 16 = Alt/Option;
+  `mouse_wheel` is 120 per notch and must be reset by the script;
+  `gfx_ext_retina` doubles `gfx_w/gfx_h` on macOS only; `gfx_ext_flags & 1`
+  means embedded in the track/mixer panel.
+- `gfx_rect`'s 5th argument (filled) is optional and defaults to filled; we
+  omit it.
 
 ## Design rules
 

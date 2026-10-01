@@ -60,7 +60,8 @@ Tip: like any reverb, it works best on its own track fed by sends, with
   resonances too many to draw. The green meters show the reverb's level.
 
 All controls can still be automated: in REAPER, click **Param** in the FX
-window, or add envelopes as usual.
+window, or add envelopes as usual. If you embed the plugin in the track or
+mixer panel, it shows a compact view: the material name and level meters.
 
 ## Controls
 

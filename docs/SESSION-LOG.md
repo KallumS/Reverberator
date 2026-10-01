@@ -23,6 +23,7 @@ otherwise. Decisions are cross-referenced to `docs/adr/`.
 14. [Dead ends and corrections](#14-dead-ends-and-corrections)
 15. [Open questions for the user](#15-open-questions-for-the-user)
 16. [First run in REAPER, and the interface](#16-first-run-in-reaper-and-the-interface)
+17. [Checking against the official JSFX reference](#17-checking-against-the-official-jsfx-reference)
 
 ---
 
@@ -312,9 +313,12 @@ amplitude, recovered from each resonator's two state values as
 √((y₁² + y₂² − 2y₁y₂ cos θ)/sin²θ)), wet meters, and eleven knobs. The
 default sliders are hidden with a `-` prefix.
 
-**Thread safety.** `@gfx` shares all variables with the audio code and EEL2
-locals are static, so every GUI name is `ui_`-prefixed and the GUI calls only
-`ui_` functions — the same lesson as §6, applied before it could bite.
+**Thread safety.** `@gfx` shares all global variables with the audio code,
+so every GUI name is `ui_`-prefixed and the GUI calls only `ui_` functions —
+the same lesson as §6, applied before it could bite. (This section first
+said EEL2 locals are shared static storage; the official reference, read in
+§17, says they are kept per code section. The `ui_` rule stands, for the
+globals.)
 Because `@slider` does not run for GUI changes, its body became
 `apply_params()`, called from `@slider` and from `@block` when `ui_changed`
 is set.
@@ -341,4 +345,42 @@ peak meters.
 - Full check and stability sweep re-run after the engine changes: loudness
   table unchanged (all −24.0 ± 0.1 LUFS), CPU unchanged (2.3–17.1 %),
   **0 failures**.
+
+## 17. Checking against the official JSFX reference
+
+Before testing the interface in REAPER, the user supplied REAPER's JSFX
+Programming Reference (10 pages) and its API function list. The plugin was
+read against all of it. Confirmed correct: slider syntax (`:log=X`, `-`
+hiding, enums), the ~8.4 M-slot memory limit (the pool ends at 8.3 M), string
+slots 0–1023, `slider(i)` as an lvalue, the `slider_automate` mask
+(bit n−1 for slider n), `mouse_cap` 8 = Shift, `mouse_wheel` 120 per notch,
+`gfx_ext_retina` doubling `gfx_w` on macOS, `gfx_drawstr` flags, `gfx_arc`
+and `gfx_circle` signatures, function declaration order, and every mixed
+`&&`/`||` in the code (all parenthesised — the reference warns they have
+equal precedence).
+
+Found and fixed:
+
+1. **Touch automation was never ended.** `slider_automate(mask, 1)` (6.74+)
+   ends a touch pass; GUI gestures now call it when they finish.
+2. **Font sizes below 8.** The reference allows 8–100; at small window sizes
+   the knob labels went to 5. Now clamped.
+3. **Text could clip.** `gfx_drawstr` clips to its box; several boxes were
+   only a few pixels taller than the nominal font size, and REAPER's macOS
+   fonts are taller than the test host's. Non-centred text now gets
+   `gfx_texth` of extra room below.
+4. **`gfx_rect`'s fifth argument** is in the API list but not the JSFX page;
+   it was always 1 (filled), which is the default, so it is now omitted.
+5. **A wrong statement in the docs**: §16, ADR 0016 and CLAUDE.md said EEL2
+   locals are shared static storage. The reference says they are kept per
+   code section. The `ui_` rule stands — it protects the shared *globals*.
+
+Added, prompted by the reference: a compact view when embedded in REAPER's
+track or mixer panel (`gfx_ext_flags & 1`); and `tools/gui_check.py`, nine
+simulated-mouse tests checking engine variables (0 failures). Loudness is
+unchanged (all materials −24.0/−24.1 LUFS); the audio code was not touched.
+
+Noted, not changed: `@init` (and so a rebuild) runs on every transport
+start, which clears the reverb tail when playback starts — normal for a
+reverb; `ext_tail_size` could later tell REAPER how long the tail is.
 
