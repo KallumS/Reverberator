@@ -152,4 +152,4 @@ traps, and `docs/SESSION-LOG.md` for how everything was built and measured.
 
 ## Licence
 
-MIT — see `LICENSE`.
+GNU General Public License v3 - see [LICENSE](LICENSE).
