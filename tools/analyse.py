@@ -2,10 +2,10 @@
 import sys
 import numpy as np
 
-NAMES = ["Chain link fence", "Ice sheet", "Tension wire", "Gong", "PVC pipe", "Glass",
-         "Marble", "Car body panel", "Leather", "Wine bottle", "Piano string",
-         "Guitar string", "Violin string", "Steel handpan", "Toilet roll tube",
-         "Aluminium foil", "Cling film", "Corrugated tin roof", "Metal barrel", "Bone"]
+NAMES = ["Chain Link Fence", "Ice Sheet", "Tension Wire", "Gong", "PVC Pipe", "Glass",
+         "Marble", "Car Body Panel", "Leather", "Wine Bottle", "Piano String",
+         "Guitar String", "Violin String", "Steel Handpan", "Toilet Roll Tube",
+         "Aluminium Foil", "Cling Film", "Corrugated Tin Roof", "Metal Barrel", "Bone"]
 
 
 def load(path):
