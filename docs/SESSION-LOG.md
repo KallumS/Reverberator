@@ -468,3 +468,32 @@ lengthen it); a CLAP port if the plugin is wanted outside REAPER; the
 `pip install numpy scipy matplotlib`). The scratch harness used early in
 this session lived outside the repository and is superseded by `tools/`.
 
+## 20. VST3 and CLAP plugins (24 October 2026)
+
+Asked for: Reverberator as a VST3 and CLAP plugin for the Mac, built by
+GitHub Actions. Done by wrapping the JSFX (ADR 0017).
+
+- `plugin/source/JsfxPlugin.cpp` is the wrapper: the .jsfx compiled in as
+  binary data, written to the plugin's Application Support folder and loaded
+  by ysfx from there (ysfx loads from a path); one host parameter per slider;
+  the `@gfx` view of ysfx's own plugin (`graphics_view.cpp`) as the window.
+- Built and compile-checked on Linux first, then on a `macos-14` runner,
+  universal (arm64 + x86_64). The standalone app is built only so the
+  workflow can open the window and take a picture of it.
+- **pluginval** (strictness 5) passed first time.
+- **clap-validator** found two real faults: a value the host set came back
+  from a saved state slightly different (the slider snaps to its step: Mix
+  0.10921 became 0.109), and a state saved before any audio ran missed the
+  host's changes. The parameter now holds the slider's own value, snapped,
+  and saving applies pending changes first. Its `state-invalid` test is
+  skipped: JUCE's `setStateInformation` cannot say a load failed.
+- On Instrument Creator, clap-validator then found a saved state that read
+  back different: before the window has run, `ui_zoom` is 0, and loading
+  runs `@serialize`, which turns 0 into 1 (100%). Harmless (REAPER does the
+  same), but a project should save what it loads, so the wrapper now passes
+  a new instance's state through `@serialize` once at start.
+  `plugin/test/state_check.cpp` (in CI as `jsfx_state_check`) reproduces
+  what clap-validator does without a host; it failed before the fix.
+- Not seen in a DAW yet: the window inside a host, automation recording from
+  the window, and a Retina screen.
+

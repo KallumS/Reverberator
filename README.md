@@ -129,6 +129,24 @@ to be tuned against the loop's **exact phase**, not an idealised length.
 Bone's material constants (stiffness, density, and its rough bore) come from
 Wind-Instrument-Creator's material table.
 
+## Using it as a VST3 or CLAP plugin (Mac)
+
+Reverberator also comes as a VST3 and a CLAP plugin for any DAW on a Mac
+(Apple Silicon and Intel). It is the same `Reverberator.jsfx` inside, run by
+the same engine REAPER uses, with the same window, so it sounds the same.
+
+1. Download `Reverberator-macOS.zip` from the repository's **Releases** (or,
+   for the latest build, **Actions → Plugins → the newest run → Artifacts**)
+   and unzip it.
+2. Follow `INSTALL.txt` inside: copy the two plugins into
+   `~/Library/Audio/Plug-Ins/VST3` and `~/Library/Audio/Plug-Ins/CLAP`, then
+   paste one Terminal line that clears macOS's download flag (the plugins are
+   not signed with an Apple developer certificate).
+3. Rescan plugins in your DAW and look for **Reverberator** (by KallumS).
+
+Every control is also a parameter your DAW can automate, and the project
+remembers everything, as REAPER does.
+
 ## For developers
 
 `tools/` holds a headless test rig built on
@@ -145,6 +163,12 @@ python3 tools/spectrograms.py out.png  # impulse-response spectrogram grid
 tools/build/gui Reverberator.jsfx out.bgra 760 480 2 1=<material>
 python3 tools/gui_png.py out.bgra 1520 960 out.png   # draw the interface to a PNG
 ```
+
+The plugins are built by `plugin/build.sh` (on a Mac for the real thing;
+it also compiles on Linux as a check), and by the workflow in
+`.github/workflows/plugin.yml` on every push, which also runs pluginval and
+clap-validator on them. Pushing a tag such as `v1.0` publishes the zip as a
+release.
 
 The Python tools need `numpy`, `scipy` and `matplotlib`; the interface tool
 also needs the freetype and fontconfig libraries. See `CLAUDE.md` for the
