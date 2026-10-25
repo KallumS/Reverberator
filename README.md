@@ -1,5 +1,9 @@
 # Reverberator
 
+> **This is the `plugin` branch: the VST3 and CLAP plugins.** The REAPER version lives on
+> `main` and does not include any of this. Changes to the REAPER version are
+> made on `main` and merged into `plugin`; `plugin` is never merged into `main`.
+
 A reverb that sends your sound through **odd materials** instead of a room —
 the way a plate reverb sends it through a sheet of steel, or a spring reverb
 through a coiled spring. Pick a material, and the plugin plays your audio

@@ -1,5 +1,10 @@
 # CLAUDE.md
 
+**Branches.** `main` is the REAPER version only. `plugin` (this branch) adds
+the VST3 and CLAP plugins on top of it. Work on the REAPER version goes on `main` and is merged
+into `plugin` (`git merge main`); `plugin` is never merged into `main`, so the
+REAPER version never carries the build files, workflows or plugin-only code.
+
 Working notes for Reverberator: a JSFX reverb that sends audio through
 physical models of odd materials. The user is not a programmer: explain
 results in plain language, and keep `README.md` readable for them.
