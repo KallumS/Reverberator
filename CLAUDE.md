@@ -69,7 +69,7 @@ python3 tools/check.py                    # ~10 min: + 20 materials x 11 extreme
 python3 tools/check.py --trims --no-sweep # after any physics change
 python3 tools/gui_check.py                # ~10 s: after any change to @gfx
 plugin/build.sh                           # VST3 + CLAP into plugin/out (~10 min first time)
-EXTRA_TARGETS=jsfx_state_check plugin/build.sh && plugin/build/jsfx_state_check   # saved state round-trips
+EXTRA_TARGETS=jsfx_state_check plugin/build.sh && plugin/build/jsfx_state_check   # makes sound; saved state round-trips
 ```
 
 Run the sweep in the background. It must report `0 failure(s)`. "note" lines
