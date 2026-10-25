@@ -113,6 +113,9 @@ Run the sweep in the background. It must report `0 failure(s)`. "note" lines
   slider, and add a knob or control for it in the GUI.
 - `mouse_wheel` is 120 per notch in REAPER; ysfx (and so `tools/build/gui`)
   uses 512.
+- **Text follows Apple's writing guidelines** (ADR 0017): title-style names,
+  slider names and tiles; sentence-case descriptions and hints; curly quotes,
+  em dashes; "Shift-drag" spelled out. Never reorder an enum list to rename it.
 - Check GUI changes by rendering:
   `tools/build/gui Reverberator.jsfx out.bgra 760 480 2 1=<material>` then
   `python3 tools/gui_png.py out.bgra 1520 960 out.png`, and look at it.
