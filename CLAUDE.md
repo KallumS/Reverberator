@@ -38,6 +38,8 @@ tools/spectrograms.py  impulse-response spectrogram grid
 tools/test_signals.py  synthesised drum + pluck program
 tools/analyse.py       IR metrics (T60, centroid) and the material names list
 demos/                 rendered WAVs, git-ignored (tools/render_demos.py demos)
+plugin/                the VST3/CLAP plugin: the .jsfx in a JUCE wrapper run by ysfx (ADR 0017)
+.github/workflows/plugin.yml   builds, validates and zips the plugins on a Mac runner
 ```
 
 Python tools need numpy, scipy and matplotlib. The tools default to
@@ -61,6 +63,8 @@ python3 tools/check.py --no-sweep         # ~1 min: loudness/peak/CPU/T60 table
 python3 tools/check.py                    # ~10 min: + 20 materials x 11 extremes x 3 sample rates
 python3 tools/check.py --trims --no-sweep # after any physics change
 python3 tools/gui_check.py                # ~10 s: after any change to @gfx
+plugin/build.sh                           # VST3 + CLAP into plugin/out (~10 min first time)
+EXTRA_TARGETS=jsfx_state_check plugin/build.sh && plugin/build/jsfx_state_check   # saved state round-trips
 ```
 
 Run the sweep in the background. It must report `0 failure(s)`. "note" lines
@@ -185,3 +189,16 @@ committed: they are REAPER's documents). Points that matter here:
   so "still loud at the end" is not instability. ADR 0013.
 - `inspect` prints memory with `%.6g`; recovering a very low mode frequency
   from its `2r cos θ` coefficient loses precision there. Don't chase it.
+
+## The plugin (ADR 0017)
+
+- `plugin/` wraps `Reverberator.jsfx` unchanged; there is nothing to port
+  when the JSFX changes. The wrapper source is shared with Instrument
+  Creator: change it in both.
+- **A new slider is a new host parameter**, ID `slider<n>`: append sliders,
+  never renumber, or saved projects and automation point at the wrong one.
+- The GitHub archive host is blocked from the cloud container; `build.sh`
+  clones JUCE and ysfx with git for that reason.
+- CI cannot hand artifacts or logs to the container as files; the workflow
+  pushes its screenshot to a throwaway `ci-screenshots` branch, which can be
+  fetched with git.
