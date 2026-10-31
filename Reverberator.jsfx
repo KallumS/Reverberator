@@ -1,4 +1,4 @@
-desc:Reverberator - Material Reverb (physically modelled)
+desc:Reverberator — Material Reverb (Physically Modelled)
 //tags: reverb physical-modelling plate spring
 //author: KallumS
 //
@@ -8,17 +8,17 @@ desc:Reverberator - Material Reverb (physically modelled)
 // loss factor -- and the resonances, decay times and echo density are derived
 // from them. See README.md and docs/PHYSICS.md for the reasoning and numbers.
 
-slider1:0<0,19,1{Chain link fence,Ice sheet,Tension wire,Gong,PVC pipe,Glass,Marble,Car body panel,Leather,Wine bottle,Piano string,Guitar string,Violin string,Steel handpan,Toilet roll tube,Aluminium foil,Cling film,Corrugated tin roof,Metal barrel,Bone}>-Material
+slider1:0<0,19,1{Chain Link Fence,Ice Sheet,Tension Wire,Gong,PVC Pipe,Glass,Marble,Car Body Panel,Leather,Wine Bottle,Piano String,Guitar String,Violin String,Steel Handpan,Toilet Roll Tube,Aluminium Foil,Cling Film,Corrugated Tin Roof,Metal Barrel,Bone}>-Material
 slider2:35<0,100,0.1>-Mix (%)
 slider3:100<25,400,1:log=100>-Size (%)
 slider4:100<10,400,1:log=100>-Decay (%)
 slider5:0<-100,100,1>-Brightness
 slider6:0<-12,12,0.1>-Tuning (semitones)
-slider7:0<0,250,1>-Pre-delay (ms)
+slider7:0<0,250,1>-Pre-Delay (ms)
 slider8:30<0,100,1>-Drive (%)
 slider9:100<0,150,1>-Width (%)
-slider10:20<20,1000,1:log=150>-Low cut (Hz)
-slider11:20000<1000,20000,10:log=5000>-High cut (Hz)
+slider10:20<20,1000,1:log=150>-Low Cut (Hz)
+slider11:20000<1000,20000,10:log=5000>-High Cut (Hz)
 slider12:0<-24,12,0.1>-Output (dB)
 
 in_pin:Left input
@@ -937,25 +937,25 @@ ui_knob(9,  11, 1000, 20000, 1, 20000, 10);    // High cut
 ui_knob(10, 12,  -24,    12, 0,     0, 0.1);   // Output
 
 // string slots: 100+ material names, 150+ what each sounds like, 300+ knob labels
-strcpy(100, "Chain link fence");    strcpy(150, "Metallic twang, laser 'pew' and jangling links");
-strcpy(101, "Ice sheet");           strcpy(151, "Falling 'pew pew' echoes off a frozen lake");
-strcpy(102, "Tension wire");        strcpy(152, "Long droning sci-fi blaster chirps");
+strcpy(100, "Chain Link Fence");    strcpy(150, "Metallic twang, laser “pew” and jangling links");
+strcpy(101, "Ice Sheet");           strcpy(151, "Falling “pew pew” echoes off a frozen lake");
+strcpy(102, "Tension Wire");        strcpy(152, "Long droning sci-fi blaster chirps");
 strcpy(103, "Gong");                strcpy(153, "A huge, dark, shimmering tam-tam wash");
-strcpy(104, "PVC pipe");            strcpy(154, "Hollow, tubey flutter down 1.5 m of pipe");
+strcpy(104, "PVC Pipe");            strcpy(154, "Hollow, tubey flutter down 1.5 m of pipe");
 strcpy(105, "Glass");               strcpy(155, "Bright, glassy ring of a window pane");
 strcpy(106, "Marble");              strcpy(156, "A short, stony, pitched clink");
-strcpy(107, "Car body panel");      strcpy(157, "The clanky metallic bonk of a door skin");
+strcpy(107, "Car Body Panel");      strcpy(157, "The clanky metallic bonk of a door skin");
 strcpy(108, "Leather");             strcpy(158, "A dead, thumpy drum-skin thud");
-strcpy(109, "Wine bottle");         strcpy(159, "A hooty 110 Hz boom with a glass clink");
-strcpy(110, "Piano string");        strcpy(160, "The halo of 24 piano strings, pedal down");
-strcpy(111, "Guitar string");       strcpy(161, "Six open strings humming through the body");
-strcpy(112, "Violin string");       strcpy(162, "Nasal, woody violin-body resonance");
-strcpy(113, "Steel handpan");       strcpy(163, "A sweet, bell-like bloom in D minor");
-strcpy(114, "Toilet roll tube");    strcpy(164, "Honky and boxy, like talking through a tube");
-strcpy(115, "Aluminium foil");      strcpy(165, "A sizzly, crinkly, papery splash");
-strcpy(116, "Cling film");          strcpy(166, "A soft, rubbery, kazoo-like buzz");
-strcpy(117, "Corrugated tin roof"); strcpy(167, "Rumbling, rattly and tinny");
-strcpy(118, "Metal barrel");        strcpy(168, "The boom of an oil drum, with a steel ring");
+strcpy(109, "Wine Bottle");         strcpy(159, "A hooty 110 Hz boom with a glass clink");
+strcpy(110, "Piano String");        strcpy(160, "The halo of 24 piano strings, pedal down");
+strcpy(111, "Guitar String");       strcpy(161, "Six open strings humming through the body");
+strcpy(112, "Violin String");       strcpy(162, "Nasal, woody violin-body resonance");
+strcpy(113, "Steel Handpan");       strcpy(163, "A sweet, bell-like bloom in D minor");
+strcpy(114, "Toilet Roll Tube");    strcpy(164, "Honky and boxy, like talking through a tube");
+strcpy(115, "Aluminium Foil");      strcpy(165, "A sizzly, crinkly, papery splash");
+strcpy(116, "Cling Film");          strcpy(166, "A soft, rubbery, kazoo-like buzz");
+strcpy(117, "Corrugated Tin Roof"); strcpy(167, "Rumbling, rattly and tinny");
+strcpy(118, "Metal Barrel");        strcpy(168, "The boom of an oil drum, with a steel ring");
 strcpy(119, "Bone");                strcpy(169, "A dry, woody knock with a hollow, hooty core");
 strcpy(300, "MIX");     strcpy(301, "SIZE");      strcpy(302, "DECAY");    strcpy(303, "BRIGHT");
 strcpy(304, "TUNE");    strcpy(305, "PRE-DELAY"); strcpy(306, "DRIVE");    strcpy(307, "WIDTH");
@@ -986,8 +986,8 @@ function ui_value_str(k, v)
   k == 3 ? sprintf(#ui_val, "%+d", floor(v + 0.5)) :
   k == 4 ? sprintf(#ui_val, "%+.1f st", v) :
   k == 5 ? sprintf(#ui_val, "%d ms", floor(v + 0.5)) :
-  k == 8 ? (v <= 20.5 ? strcpy(#ui_val, "off") : sprintf(#ui_val, "%d Hz", floor(v + 0.5))) :
-  k == 9 ? (v >= 19999 ? strcpy(#ui_val, "off") : sprintf(#ui_val, "%.1f kHz", v/1000)) :
+  k == 8 ? (v <= 20.5 ? strcpy(#ui_val, "Off") : sprintf(#ui_val, "%d Hz", floor(v + 0.5))) :
+  k == 9 ? (v >= 19999 ? strcpy(#ui_val, "Off") : sprintf(#ui_val, "%.1f kHz", v/1000)) :
   k == 10 ? sprintf(#ui_val, "%+.1f dB", v) :
   sprintf(#ui_val, "%d%%", floor(v + 0.5));
 );
@@ -1252,7 +1252,7 @@ ui_x0 = ui_ox + 20*ui_s;
 gfx_setfont(2); ui_rgb(0.93, 0.93, 0.94, 1);
 ui_text("REVERBERATOR", ui_x0, 12*ui_s, 400*ui_s, 26*ui_s, 0);
 gfx_setfont(3); ui_rgb(0.55, 0.58, 0.63, 1);
-ui_text("physically modelled material reverb", ui_x0, 40*ui_s, 400*ui_s, 14*ui_s, 0);
+ui_text("Physically modelled material reverb", ui_x0, 40*ui_s, 400*ui_s, 14*ui_s, 0);
 gfx_setfont(4); ui_rgb(0.96, 0.66, 0.29, 1);
 ui_text(100 + ui_mat, ui_ox + 300*ui_s, 12*ui_s, 440*ui_s, 26*ui_s, 2);
 gfx_setfont(3); ui_rgb(0.75, 0.77, 0.8, 1);
@@ -1340,13 +1340,13 @@ loop(n_modes,
 );
 // caption
 gfx_setfont(5); ui_rgb(0.55, 0.58, 0.63, 1);
-ui_text("WHAT'S RINGING", ui_px, ui_ry + 6*ui_s, 200*ui_s, 14*ui_s, 0);
+ui_text("WHAT’S RINGING", ui_px, ui_ry + 6*ui_s, 200*ui_s, 14*ui_s, 0);
 gfx_setfont(3); ui_rgb(0.62, 0.65, 0.7, 1);
 #ui_cap = "";
 n_modes > 0 ? ( sprintf(#ui_lbl, "%d resonances", n_modes); strcat(#ui_cap, #ui_lbl); );
 ui_nstr > 0 ? ( sprintf(#ui_lbl, "%s%d %s", strlen(#ui_cap) ? "  ·  " : "", ui_nstr, ui_nstr == 1 ? "string/air column" : "strings/air columns"); strcat(#ui_cap, #ui_lbl); );
 ui_nstr < n_wg ? ( sprintf(#ui_lbl, "%s%d dispersive paths", strlen(#ui_cap) ? "  ·  " : "", n_wg - ui_nstr); strcat(#ui_cap, #ui_lbl); );
-fdn_on ? ( sprintf(#ui_lbl, "%sdense field %.2g modes/Hz", strlen(#ui_cap) ? "  ·  " : "", fdn_disp_dens); strcat(#ui_cap, #ui_lbl); );
+fdn_on ? ( sprintf(#ui_lbl, "%sDense field %.2g modes/Hz", strlen(#ui_cap) ? "  ·  " : "", fdn_disp_dens); strcat(#ui_cap, #ui_lbl); );
 ui_text(#ui_cap, ui_px + 120*ui_s, ui_ry + 7*ui_s, 540*ui_s, 14*ui_s, 2);
 // wet output meters
 ui_i = 0;
@@ -1424,7 +1424,7 @@ loop(11,
   ui_i += 1;
 );
 gfx_setfont(3); ui_rgb(0.4, 0.43, 0.48, 1);
-ui_text("drag knobs up/down  ·  shift-drag for fine  ·  double-click to reset  ·  mouse wheel",
+ui_text("Drag a knob up or down  ·  Shift-drag for fine control  ·  Double-click to reset  ·  Scroll to adjust",
         ui_ox, 460*ui_s, 760*ui_s, 14*ui_s, 1);
 
 );  // end of the full (non-embedded) interface

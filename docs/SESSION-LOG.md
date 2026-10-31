@@ -468,3 +468,26 @@ lengthen it); a CLAP port if the plugin is wanted outside REAPER; the
 `pip install numpy scipy matplotlib`). The scratch harness used early in
 this session lived outside the repository and is superseded by `tools/`.
 
+
+## 20. Wording to Apple's writing guidelines (2026-10-14)
+
+The user asked for every app's text to follow Apple's Human Interface
+Guidelines on writing, as for Noterator and Miderator (ADR 0017). Text only:
+no slider renumbered, reordered or re-ranged, no sound changed.
+
+- Material names title-style in the tiles, the header and the Material
+  slider's list ("Chain link fence" → "Chain Link Fence"), and in
+  `tools/analyse.py` and the README's table to match.
+- Slider names "Pre-Delay (ms)", "Low Cut (Hz)", "High Cut (Hz)"; the
+  description line "Reverberator — Material Reverb (Physically Modelled)".
+- Sentence case for the subtitle, the status line ("Dense field …") and the
+  hint line, now "Drag a knob up or down · Shift-drag for fine control ·
+  Double-click to reset · Scroll to adjust". "off" → "Off".
+- Curly quotes and apostrophes: “pew”, “pew pew”, WHAT’S RINGING.
+- Knob captions keep their capitals and short forms (BRIGHT and TUNE do not
+  fit as full words).
+
+Verified: `tools/gui_check.py` 0 failures; the window rendered at 2× with
+the fence, the tin roof (the longest name) and the handpan, nothing clipped.
+`docs/gui.png` and `docs/gui-bone.png` re-rendered (with audio, so the
+meters show).

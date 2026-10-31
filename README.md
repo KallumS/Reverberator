@@ -12,25 +12,25 @@ compiling, no installer.
 
 | # | Material | What you hear | Where the sound comes from |
 |---|---|---|---|
-| 1 | Chain link fence | Metallic twang, laser-ish "pew", jangling | Two stiff 4 mm line wires (highs outrun lows) plus 24 mesh-link resonances set off by rattling |
-| 2 | Ice sheet | Descending "pew pew" echoes | Bending waves in 5 cm lake ice travel faster the higher they are, so every echo off the shore arrives as a falling chirp |
-| 3 | Tension wire | Long droning sci-fi "blaster" chirps | 25 m and 31 m steel guy wires; tension carries the lows, stiffness races the highs ahead (Ben Burtt's blaster was a hammered guy wire) |
+| 1 | Chain Link Fence | Metallic twang, laser-ish "pew", jangling | Two stiff 4 mm line wires (highs outrun lows) plus 24 mesh-link resonances set off by rattling |
+| 2 | Ice Sheet | Descending "pew pew" echoes | Bending waves in 5 cm lake ice travel faster the higher they are, so every echo off the shore arrives as a falling chirp |
+| 3 | Tension Wire | Long droning sci-fi "blaster" chirps | 25 m and 31 m steel guy wires; tension carries the lows, stiffness races the highs ahead (Ben Burtt's blaster was a hammered guy wire) |
 | 4 | Gong | A huge, dark, shimmering wash | 80 cm bronze tam-tam: its circular-plate modes plus a dense field above; Drive adds the delayed shimmer bloom |
-| 5 | PVC pipe | Hollow, tubey flutter | The air column in 1.5 m of 2" pipe, open both ends, with the same air-loss physics as Trombolese |
+| 5 | PVC Pipe | Hollow, tubey flutter | The air column in 1.5 m of 2" pipe, open both ends, with the same air-loss physics as Trombolese |
 | 6 | Glass | Bright, glassy, long ring | A free 800 × 600 × 5 mm pane: stiff, light, very low loss |
 | 7 | Marble | Short stony "clink", pitched | A 1 m × 60 cm × 2 cm slab: thick and stiff, so few, high, sparse modes |
-| 8 | Car body panel | Clanky metallic "bonk" | A 0.8 mm steel door skin; its curve stiffens the low modes so they bunch up around 340 Hz |
+| 8 | Car Body Panel | Clanky metallic "bonk" | A 0.8 mm steel door skin; its curve stiffens the low modes so they bunch up around 340 Hz |
 | 9 | Leather | Dead, thumpy drum-skin thud | A stretched hide like a frame drum; leather's internal friction kills it fast, and the pitch sags as it decays |
-| 10 | Wine bottle | Hooty boom at ~110 Hz plus a glass clink | The air in a 750 ml bottle is a Helmholtz resonator; the glass wall rings on top |
-| 11 | Piano string | Shimmering sympathetic halo | 24 piano strings (C2–B3) with the sustain pedal down, ringing along with whatever you play, through a spruce soundboard |
-| 12 | Guitar string | Six open strings humming along | Steel strings in standard tuning radiating through a guitar body (air mode ~98 Hz) |
-| 13 | Violin string | Nasal, woody sympathetic ring | G D A E strings heard through a violin body (A0 ~275 Hz, "bridge hill" ~2.5 kHz) |
-| 14 | Steel handpan | Sweet, tuned, bell-like bloom in D minor | Nine tone fields (D Kurd), each tuned fundamental : octave : fifth, plus the shell's "Gu" port resonance |
-| 15 | Toilet roll tube | Honky, boxy, talking-through-a-tube | 10 cm of cardboard tube; porous walls soak up the ring |
-| 16 | Aluminium foil | Sizzly, crinkly, papery splash | A 16-micron sheet: vast numbers of overlapping modes, plus crinkle crackles when driven |
-| 17 | Cling film | Soft, rubbery, kazoo-like buzz | Film so light the air it drags outweighs it 14×; loud input makes it slap and buzz |
-| 18 | Corrugated tin roof | Rumbling, rattly, tinny | Ribbed 0.5 mm steel ~1800× stiffer along the ribs than across, with loose fixings that rattle |
-| 19 | Metal barrel | Boomy "inside an oil drum" resonance with steel ring | The air cavity of a 205 litre drum, its two lids, and the steel shell |
+| 10 | Wine Bottle | Hooty boom at ~110 Hz plus a glass clink | The air in a 750 ml bottle is a Helmholtz resonator; the glass wall rings on top |
+| 11 | Piano String | Shimmering sympathetic halo | 24 piano strings (C2–B3) with the sustain pedal down, ringing along with whatever you play, through a spruce soundboard |
+| 12 | Guitar String | Six open strings humming along | Steel strings in standard tuning radiating through a guitar body (air mode ~98 Hz) |
+| 13 | Violin String | Nasal, woody sympathetic ring | G D A E strings heard through a violin body (A0 ~275 Hz, "bridge hill" ~2.5 kHz) |
+| 14 | Steel Handpan | Sweet, tuned, bell-like bloom in D minor | Nine tone fields (D Kurd), each tuned fundamental : octave : fifth, plus the shell's "Gu" port resonance |
+| 15 | Toilet Roll Tube | Honky, boxy, talking-through-a-tube | 10 cm of cardboard tube; porous walls soak up the ring |
+| 16 | Aluminium Foil | Sizzly, crinkly, papery splash | A 16-micron sheet: vast numbers of overlapping modes, plus crinkle crackles when driven |
+| 17 | Cling Film | Soft, rubbery, kazoo-like buzz | Film so light the air it drags outweighs it 14×; loud input makes it slap and buzz |
+| 18 | Corrugated Tin Roof | Rumbling, rattly, tinny | Ribbed 0.5 mm steel ~1800× stiffer along the ribs than across, with loose fixings that rattle |
+| 19 | Metal Barrel | Boomy "inside an oil drum" resonance with steel ring | The air cavity of a 205 litre drum, its two lids, and the steel shell |
 | 20 | Bone | Dry, woody knock with a hollow, hooty core | A dried human shin bone: its hollow shaft bending and twisting (tuned against resonances measured on real tibiae), the air sealed in its marrow cavity, and at high Drive the clack of "rhythm bones" |
 
 ## Installing in REAPER
@@ -74,10 +74,10 @@ mixer panel, it shows a compact view: the material name and level meters.
 | **Decay** | Longer or shorter ring, without changing the object. |
 | **Brightness** | Lets the high frequencies ring longer (+) or die faster (−). |
 | **Tuning** | Transposes the object in semitones — useful for the piano, guitar, violin, handpan and bottle, which have real pitches. |
-| **Pre-delay** | A gap before the reverb starts. |
+| **Pre-Delay** | A gap before the reverb starts. |
 | **Drive** | How hard the transducer hits the material. Above about 30% the level-dependent behaviour appears: the fence and tin roof rattle, foil crackles, cling film buzzes, the gong and barrel shimmer, membranes bend in pitch. |
 | **Width** | Stereo width of the reverb. |
-| **Low cut / High cut** | Filters on the reverb only. |
+| **Low Cut / High Cut** | Filters on the reverb only. |
 | **Output** | Overall level. |
 
 Changing **Material**, **Size** or **Tuning** rebuilds the object, so the tail

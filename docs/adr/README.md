@@ -22,6 +22,7 @@ the decisions were made; superseded records stay, marked as such.
 | [0014](0014-material-interpretations.md) | Which version of each object is modelled |
 | [0015](0015-demos-not-committed.md) | Audio demos are generated, not committed |
 | [0016](0016-custom-gui.md) | A custom @gfx interface, with the default sliders hidden |
+| [0017](0017-text-follows-apple-writing-guidelines.md) | The window's text follows Apple's writing guidelines |
 
 ## Adding a record
 
