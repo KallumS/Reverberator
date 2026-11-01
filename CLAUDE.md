@@ -38,7 +38,7 @@ tools/spectrograms.py  impulse-response spectrogram grid
 tools/test_signals.py  synthesised drum + pluck program
 tools/analyse.py       IR metrics (T60, centroid) and the material names list
 demos/                 rendered WAVs, git-ignored (tools/render_demos.py demos)
-plugin/                the VST3/CLAP plugin: the .jsfx in a JUCE wrapper run by ysfx (ADR 0017)
+plugin/                the VST3/CLAP plugin: the .jsfx in a JUCE wrapper run by ysfx (ADR 0018)
 .github/workflows/plugin.yml   builds, validates and zips the plugins on a Mac runner
 ```
 
@@ -190,7 +190,7 @@ committed: they are REAPER's documents). Points that matter here:
 - `inspect` prints memory with `%.6g`; recovering a very low mode frequency
   from its `2r cos θ` coefficient loses precision there. Don't chase it.
 
-## The plugin (ADR 0017)
+## The plugin (ADR 0018)
 
 - `plugin/` wraps `Reverberator.jsfx` unchanged; there is nothing to port
   when the JSFX changes. The wrapper source is shared with Instrument
