@@ -468,10 +468,34 @@ lengthen it); a CLAP port if the plugin is wanted outside REAPER; the
 `pip install numpy scipy matplotlib`). The scratch harness used early in
 this session lived outside the repository and is superseded by `tools/`.
 
-## 20. VST3 and CLAP plugins (24 October 2026)
+
+## 20. Wording to Apple's writing guidelines (2026-10-14)
+
+The user asked for every app's text to follow Apple's Human Interface
+Guidelines on writing, as for Noterator and Miderator (ADR 0017). Text only:
+no slider renumbered, reordered or re-ranged, no sound changed.
+
+- Material names title-style in the tiles, the header and the Material
+  slider's list ("Chain link fence" → "Chain Link Fence"), and in
+  `tools/analyse.py` and the README's table to match.
+- Slider names "Pre-Delay (ms)", "Low Cut (Hz)", "High Cut (Hz)"; the
+  description line "Reverberator — Material Reverb (Physically Modelled)".
+- Sentence case for the subtitle, the status line ("Dense field …") and the
+  hint line, now "Drag a knob up or down · Shift-drag for fine control ·
+  Double-click to reset · Scroll to adjust". "off" → "Off".
+- Curly quotes and apostrophes: “pew”, “pew pew”, WHAT’S RINGING.
+- Knob captions keep their capitals and short forms (BRIGHT and TUNE do not
+  fit as full words).
+
+Verified: `tools/gui_check.py` 0 failures; the window rendered at 2× with
+the fence, the tin roof (the longest name) and the handpan, nothing clipped.
+`docs/gui.png` and `docs/gui-bone.png` re-rendered (with audio, so the
+meters show).
+
+## 21. VST3 and CLAP plugins (24 October 2026)
 
 Asked for: Reverberator as a VST3 and CLAP plugin for the Mac, built by
-GitHub Actions. Done by wrapping the JSFX (ADR 0017).
+GitHub Actions. Done by wrapping the JSFX (ADR 0018).
 
 - `plugin/source/JsfxPlugin.cpp` is the wrapper: the .jsfx compiled in as
   binary data, written to the plugin's Application Support folder and loaded
@@ -497,3 +521,9 @@ GitHub Actions. Done by wrapping the JSFX (ADR 0017).
 - Not seen in a DAW yet: the window inside a host, automation recording from
   the window, and a Retina screen.
 
+## 22. Mended after a merge (1 November 2026)
+
+The merge of `main` into `ccr-bb41d89e-95x0h0` (`03aaad4`) dropped section 21
+above and the plugin decision's line in `docs/adr/README.md`; both are back.
+That decision and the writing one were both numbered 0017: writing keeps
+0017 (it came first), the plugin is 0018. No code was affected.

@@ -43,7 +43,7 @@ tools/spectrograms.py  impulse-response spectrogram grid
 tools/test_signals.py  synthesised drum + pluck program
 tools/analyse.py       IR metrics (T60, centroid) and the material names list
 demos/                 rendered WAVs, git-ignored (tools/render_demos.py demos)
-plugin/                the VST3/CLAP plugin: the .jsfx in a JUCE wrapper run by ysfx (ADR 0017)
+plugin/                the VST3/CLAP plugin: the .jsfx in a JUCE wrapper run by ysfx (ADR 0018)
 .github/workflows/plugin.yml   builds, validates and zips the plugins on a Mac runner
 ```
 
@@ -122,6 +122,9 @@ Run the sweep in the background. It must report `0 failure(s)`. "note" lines
   slider, and add a knob or control for it in the GUI.
 - `mouse_wheel` is 120 per notch in REAPER; ysfx (and so `tools/build/gui`)
   uses 512.
+- **Text follows Apple's writing guidelines** (ADR 0017): title-style names,
+  slider names and tiles; sentence-case descriptions and hints; curly quotes,
+  em dashes; "Shift-drag" spelled out. Never reorder an enum list to rename it.
 - Check GUI changes by rendering:
   `tools/build/gui Reverberator.jsfx out.bgra 760 480 2 1=<material>` then
   `python3 tools/gui_png.py out.bgra 1520 960 out.png`, and look at it.
@@ -192,7 +195,7 @@ committed: they are REAPER's documents). Points that matter here:
 - `inspect` prints memory with `%.6g`; recovering a very low mode frequency
   from its `2r cos θ` coefficient loses precision there. Don't chase it.
 
-## The plugin (ADR 0017)
+## The plugin (ADR 0018)
 
 - `plugin/` wraps `Reverberator.jsfx` unchanged; there is nothing to port
   when the JSFX changes. The wrapper source is shared with Instrument
