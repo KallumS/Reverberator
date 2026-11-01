@@ -131,6 +131,9 @@ Wind-Instrument-Creator's material table.
 
 ## Using it as a VST3 or CLAP plugin (Mac)
 
+The plugins are made from this same Reverberator.jsfx on the `plugin` branch of this
+repository, which also builds them on GitHub.
+
 Reverberator also comes as a VST3 and a CLAP plugin for any DAW on a Mac
 (Apple Silicon and Intel). It is the same `Reverberator.jsfx` inside, run by
 the same engine REAPER uses, with the same window, so it sounds the same.
