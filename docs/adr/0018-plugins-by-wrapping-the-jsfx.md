@@ -1,7 +1,9 @@
-# 0017. VST3 and CLAP by wrapping the JSFX, not rewriting it
+# 0018. VST3 and CLAP by wrapping the JSFX, not rewriting it
 
 - Status: Accepted
 - Date: 2026-10-24
+- Number: made as 0017 alongside the writing decision of the same number;
+  renumbered 0018 on 2026-11-01.
 
 ## Context
 
