@@ -35,6 +35,14 @@ compiling, no installer.
 
 ## Installing in REAPER
 
+**With ReaPack** (easiest, and it keeps it up to date): Extensions ->
+ReaPack -> Import repositories, paste
+`https://raw.githubusercontent.com/KallumS/Reverberator/main/index.xml`,
+then Browse packages, find Reverberator and Install. That link only works
+once this has been merged into the main branch.
+
+**By hand:**
+
 1. Download `Reverberator.jsfx` from this repository.
 2. In REAPER choose **Options → Show REAPER resource path in explorer/finder**.
 3. Open the **Effects** folder there and put `Reverberator.jsfx` in it (a
