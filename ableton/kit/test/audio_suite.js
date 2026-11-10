@@ -39,6 +39,26 @@ module.exports = function (o) {
     assert.ok(r.peak > 0.01, 'it made a sound: peak ' + r.peak);
   });
 
+  test(o.name + ': gen~ has memory enough for chords at 192 kHz', () => {
+    const declared = Number(/Data M\((\d+)\)/.exec(code)[1]);
+    const big = code.replace(/Data M\(\d+\)/, 'Data M(8388608)');
+    let highest = 0;
+    for (let k = 0; k < 3; k++) {
+      const mq = new Float64Array(1024), g = genexpr.load(big, { sampleRate: 192000, mq });
+      let n = 0;
+      const put = (a, b, c) => { const at = 1 + 3 * (n % 256); mq[at] = a; mq[at + 1] = b; mq[at + 2] = c; n++; mq[0] = n; };
+      const sl = o.vary || null;
+      if (sl) g.set('slider' + sl, k);
+      for (let i = 0; i < 192000; i++) {
+        if (i === 0) [36, 48, 60, 72].forEach((p) => put(0x90, p, 110));
+        if (i === 120000) [36, 48, 60, 72].forEach((p) => put(0x80, p, 0));
+        g.step(i % 9000 < 4 ? 0.6 : 0, 0);
+      }
+      for (let i = g.M.length - 1; i >= 0; i--) if (g.M[i] !== 0) { highest = Math.max(highest, i); break; }
+    }
+    assert.ok(highest < declared * 0.75, 'memory written up to ' + highest + ' of ' + declared);
+  });
+
   test(o.name + ': the window draws and answers clicks without an error', () => {
     const d = device();
     d.run(200);
