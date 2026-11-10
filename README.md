@@ -35,6 +35,8 @@ compiling, no installer.
 
 **In Ableton Live:** `ableton/` has Reverberator as a Max for Live audio effect. See [`ableton/README.md`](ableton/README.md).
 
+![Reverberator in Ableton Live](ableton/window.png)
+
 ## Installing in REAPER
 
 **With ReaPack** (easiest, and it keeps it up to date): Extensions ->

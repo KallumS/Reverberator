@@ -31,7 +31,7 @@ The material and every knob are saved with the Live set.
 ableton/device.json` writes the `.amxd`, the `.maxpat` and the script bundle
 `Reverberator.js`. The bundle is Middaw's EEL2 runtime and `Reverberator.jsfx` for the window; the gen~ code inside the device is `Reverberator.jsfx` translated by `ableton/kit/jsfx2gen.js` at build time. See `ableton/kit/VENDORED.md`.
 
-`node --test ableton/tests/test_device.js` reads the gen~ code back out of the built device and runs it as JavaScript beside Middaw's runtime running `Reverberator.jsfx`: all twenty materials, sample for sample, within 10⁻⁶ (they agree to about 3 × 10⁻⁸). It also checks the window draws and answers clicks, every slider reaches gen~ once and again when it moves, and the state comes back. `node ableton/kit/test/shot.js ableton/Reverberator.js 760 480 out.png` draws the window.
+`node --test ableton/tests/test_device.js` reads the gen~ code back out of the built device and runs it as JavaScript beside Middaw's runtime running `Reverberator.jsfx`: all twenty materials, sample for sample, within 10⁻⁶ (they agree to about 3 × 10⁻⁸). It also checks the window draws and answers clicks, every slider reaches gen~ once and again when it moves, and the state comes back. `node ableton/window.js` redraws the picture above from the device's own drawing code (it needs Playwright's Chromium).
 
 ## Limits
 

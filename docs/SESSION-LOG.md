@@ -531,3 +531,5 @@ That decision and the writing one were both numbered 0017: writing keeps
 ## 2026-11-10 - Ableton Live device
 
 The user is switching to Ableton and asked for each REAPER project as Max for Live, one branch per repository (branch `ableton`). `ableton/kit/jsfx2gen.js` translates the JSFX's DSP to gen~; the window is the JSFX's own, on Middaw's runtime, driving gen~. Five tests in Node, including all twenty materials matched sample for sample against the runtime. Not done: opening it in Live, which is also the first time gen~ will compile the code.
+
+Later the same day the user asked for the docs to be brought up to date and a current picture in each repository. `ableton/window.png` is now drawn at Retina's 2x with text measured as Arial measures it, and `node ableton/window.js` redraws it from the repository (it was a scratch script), showing a material chosen. The root README shows it under the Ableton paragraph, and CLAUDE.md has a section on the device: building, testing, the picture, the shared kit.
