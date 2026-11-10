@@ -527,3 +527,7 @@ The merge of `main` into `ccr-bb41d89e-95x0h0` (`03aaad4`) dropped section 21
 above and the plugin decision's line in `docs/adr/README.md`; both are back.
 That decision and the writing one were both numbered 0017: writing keeps
 0017 (it came first), the plugin is 0018. No code was affected.
+
+## 2026-11-10 - Ableton Live device
+
+The user is switching to Ableton and asked for each REAPER project as Max for Live, one branch per repository (branch `ableton`). `ableton/kit/jsfx2gen.js` translates the JSFX's DSP to gen~; the window is the JSFX's own, on Middaw's runtime, driving gen~. Five tests in Node, including all twenty materials matched sample for sample against the runtime. Not done: opening it in Live, which is also the first time gen~ will compile the code.

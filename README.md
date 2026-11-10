@@ -33,6 +33,8 @@ compiling, no installer.
 | 19 | Metal Barrel | Boomy "inside an oil drum" resonance with steel ring | The air cavity of a 205 litre drum, its two lids, and the steel shell |
 | 20 | Bone | Dry, woody knock with a hollow, hooty core | A dried human shin bone: its hollow shaft bending and twisting (tuned against resonances measured on real tibiae), the air sealed in its marrow cavity, and at high Drive the clack of "rhythm bones" |
 
+**In Ableton Live:** `ableton/` has Reverberator as a Max for Live audio effect. See [`ableton/README.md`](ableton/README.md).
+
 ## Installing in REAPER
 
 **With ReaPack** (easiest, and it keeps it up to date): Extensions ->

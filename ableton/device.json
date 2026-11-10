@@ -1,0 +1,23 @@
+{
+  "name": "Reverberator",
+  "slug": "Reverberator",
+  "kind": "audio",
+  "template": "jsfx_audio",
+  "width": 260,
+  "hello": "Show Window opens Reverberator's own window.",
+  "device": {
+    "main": "Reverberator.jsfx",
+    "audio": true
+  },
+  "files": {
+    "Reverberator.jsfx": "../Reverberator.jsfx"
+  },
+  "buttons": [],
+  "scripts": [
+    "kit/runtime/jsfx.js",
+    "kit/gfx.js",
+    "kit/live.js",
+    "kit/jsfx_device.js"
+  ],
+  "memory": 524288
+}
